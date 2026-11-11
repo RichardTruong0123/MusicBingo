@@ -329,7 +329,10 @@ function createCardElement(data){
  }
 
  const actions=document.createElement('div');actions.className='card-actions';
- const cardHash=btoa(encodeURIComponent(JSON.stringify(data)));
+ 
+ // Safe UTF-8 Base64 encoding to prevent character corruption
+ const jsonString = JSON.stringify(data);
+ const cardHash = btoa(unescape(encodeURIComponent(jsonString)));
  const fullUrl=`${location.protocol}//${location.host}${location.pathname}?card=${cardHash}`;
  
  actions.innerHTML=`
@@ -342,24 +345,46 @@ function createCardElement(data){
 }
 
 function showQR(url){
- $('qrcode').innerHTML='';
- new QRCode($('qrcode'),{text:url,width:180,height:180});
- $('qrModal').classList.add('active');
+ const qrContainer = $('qrcode');
+ qrContainer.innerHTML='';
+ 
+ try {
+  new QRCode(qrContainer, {
+   text: url,
+   width: 180,
+   height: 180,
+   colorDark: "#000000",
+   colorLight: "#ffffff",
+   correctLevel: QRCode.CorrectLevel.H
+  });
+  $('qrModal').classList.add('active');
+ } catch(err) {
+  console.error("QR Generation failed:", err);
+  alert("Could not generate QR code for this card.");
+ }
 }
+
 function closeModal(){$('qrModal').classList.remove('active');}
 
-// Check for Direct Player URL Card
+// Safe URL decoding on load
 window.addEventListener('load',()=>{
  const params=new URLSearchParams(window.location.search);
  if(params.has('card')){
   try{
-   const cardData=JSON.parse(decodeURIComponent(atob(params.get('card'))));
+   const encodedData = params.get('card');
+   // Decode UTF-8 Base64 safely
+   const jsonString = decodeURIComponent(escape(atob(encodedData)));
+   const cardData=JSON.parse(jsonString);
+   
    $('mainHeader').style.display='none';
    $('appTabs').style.display='none';
    document.querySelectorAll('.view-section').forEach(v=>v.classList.remove('active'));
    $('playerCardView').classList.add('active');
    $('singleCardContainer').appendChild(createCardElement(cardData));
-  }catch(e){console.error("Invalid card URL");}
+  }catch(e){
+   console.error("Invalid card URL:", e);
+   alert("The card link appears to be corrupted or invalid.");
+  }
  }
 });
 
