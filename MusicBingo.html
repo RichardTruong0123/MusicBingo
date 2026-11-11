@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Music Bingo — Manager & Card Generator</title>
+<!-- Load jsmediatags for ID3 Parsing -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+<!-- Load QRCode.js for Shareable Card QR Codes -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;color:#172033;background:#f3f5f8}
+*{box-sizing:border-box}body{margin:0;padding:24px}.app{max-width:1120px;margin:auto}
+header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:22px}
+h1{font-size:27px;margin:0 0 5px}.sub{color:#657187;font-size:14px}
+.pill{background:#e6edf8;color:#31527d;padding:8px 12px;border-radius:20px;font-size:12px;font-weight:700}
+.toolbar,.player,.panel{background:white;border:1px solid #e1e6ed;border-radius:14px;padding:16px;margin-bottom:16px}
+.toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+button,.filelabel{border:0;border-radius:9px;padding:10px 14px;font-weight:650;cursor:pointer;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.primary{background:#2459a6;color:white}.secondary{background:#edf1f6;color:#26364d}.green{background:#197653;color:white}.purple{background:#7c3aed;color:white}.danger{background:#fff0f0;color:#a32b2b}
+input[type=search],input[type=text],select{padding:10px 12px;border:1px solid #d8dee8;border-radius:9px;font-size:14px}
+input[type=search]{min-width:220px;flex:1}
+input[type=file]{display:none}.hint{font-size:12px;color:#718096}
+.columns{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.panel{min-height:350px;padding:0;overflow:hidden}
+.panelhead{padding:16px;border-bottom:1px solid #e9edf2;display:flex;justify-content:space-between;align-items:center}
+.panelhead h2{font-size:16px;margin:0}.count{font-size:12px;color:#657187;background:#f0f3f7;border-radius:20px;padding:5px 9px}
+.list{padding:8px;max-height:440px;overflow:auto}
+.song{display:flex;align-items:center;gap:10px;padding:10px;border-radius:9px;border-bottom:1px solid #f0f2f5}
+.song:hover{background:#f7f9fc}.song.active{background:#eaf1fc}
+.songnum{width:28px;height:28px;display:grid;place-items:center;border-radius:7px;background:#edf1f6;color:#607087;font-size:11px;flex-shrink:0}
+.songinfo{min-width:0;flex:1}.songname{font-size:13px;font-weight:650;overflow-wrap:anywhere}.songmeta{font-size:11px;color:#788397;margin-top:3px}
+.song button{padding:8px 10px;white-space:nowrap}
+.player{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center}
+.now{font-size:12px;color:#748095;margin-bottom:4px}.track{font-weight:700;overflow-wrap:anywhere}
+audio{width:100%;margin-top:10px;height:34px}
+.empty{text-align:center;padding:54px 18px;color:#7a8798;font-size:13px}
+.footer{font-size:12px;color:#748095;line-height:1.5;margin:12px 2px}
+
+/* Tabs */
+.tabs{display:flex;gap:8px;margin-bottom:16px}
+.tab{padding:10px 18px;background:#e2e8f0;border-radius:10px;font-weight:700;cursor:pointer;font-size:14px;border:none}
+.tab.active{background:#2459a6;color:white}
+.view-section{display:none}
+.view-section.active{display:block}
+
+/* Card Generator Styles */
+.card-config{background:white;border:1px solid #e1e6ed;border-radius:14px;padding:20px;margin-bottom:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;align-items:end}
+.field-group{display:flex;flex-direction:column;gap:6px}
+.field-group label{font-size:12px;font-weight:700;color:#4a5568}
+.cards-container{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:24px}
+.bingo-card{background:white;border:2px solid #1a202c;border-radius:12px;padding:16px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);page-break-after:always;break-after:page;display:flex;flex-direction:column;justify-content:space-between}
+.card-header{text-align:center;margin-bottom:12px;border-bottom:2px solid #e2e8f0;padding-bottom:8px}
+.card-title{font-size:20px;font-weight:800;letter-spacing:1px;color:#1a202c;margin:0}
+.card-id{font-size:11px;color:#718096;margin-top:2px}
+.bingo-grid{display:grid;gap:6px;width:100%;aspect-ratio:1}
+.bingo-grid.size-3{grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr)}
+.bingo-grid.size-4{grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4,1fr)}
+.bingo-grid.size-5{grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(5,1fr)}
+.bingo-cell{border:1px solid #cbd5e0;border-radius:6px;padding:6px;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;text-align:center;hyphens:auto;overflow:hidden;word-break:break-word;user-select:none;cursor:pointer;background:#f8fafc;transition:background 0.2s}
+.bingo-cell.marked{background:#fed7aa !important;color:#9a3412;font-weight:800}
+.bingo-cell.free{background:#e2e8f0;font-weight:800;color:#2d3748}
+.card-actions{display:flex;gap:8px;margin-top:12px}
+
+/* QR Modal */
+.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);place-items:center;z-index:9999}
+.modal-overlay.active{display:grid}
+.modal{background:white;border-radius:14px;padding:24px;text-align:center;max-width:320px;width:90%}
+#qrcode img{margin:16px auto}
+
+@media print{
+ body{background:white;padding:0}
+ header,.tabs,.toolbar,.player,.columns,.footer,.card-config,.card-actions{display:none !important}
+ #cardGenView{display:block !important}
+ .cards-container{display:block}
+ .bingo-card{border:2px solid #000;margin-bottom:0;height:95vh;box-shadow:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+ <header id="mainHeader">
+  <div><h1>♫ Music Bingo</h1><div class="sub">Load MP3s, read ID3 tags, and generate individual bingo cards.</div></div>
+  <div class="pill">MANAGER & CARD GENERATOR</div>
+ </header>
+
+ <div class="tabs" id="appTabs">
+  <button class="tab active" onclick="switchTab('managerView')">Song Manager</button>
+  <button class="tab" onclick="switchTab('cardGenView')">Bingo Card Generator</button>
+ </div>
+
+ <!-- MANAGER VIEW -->
+ <div id="managerView" class="view-section active">
+  <section class="toolbar">
+   <label class="filelabel primary" for="folder">Choose MP3 folder</label>
+   <input id="folder" type="file" accept="audio/mpeg, .mp3" webkitdirectory directory multiple>
+   <input id="search" type="search" placeholder="Search available songs…">
+   <button class="secondary" id="clearSearch">Clear search</button>
+   <button class="purple" id="shuffleBtn">🔀 Shuffle & Play</button>
+   <span class="hint" id="folderStatus">No folder loaded</span>
+  </section>
+  <section class="player">
+   <div><div class="now">NOW PLAYING</div><div class="track" id="nowPlaying">Choose a song from Available Songs</div><audio id="audio" controls preload="metadata"></audio></div>
+   <button class="green" id="moveCurrent" disabled>Move to Selected →</button>
+  </section>
+  <div class="columns">
+   <section class="panel">
+    <div class="panelhead"><h2>Available Songs</h2><span class="count" id="availableCount">0 songs</span></div>
+    <div class="list" id="availableList"><div class="empty">Choose a folder containing MP3 files to get started.</div></div>
+   </section>
+   <section class="panel">
+    <div class="panelhead"><h2>Selected Songs</h2><span class="count" id="selectedCount">0 songs</span></div>
+    <div class="list" id="selectedList"><div class="empty">Songs you move here will appear in this list.</div></div>
+   </section>
+  </div>
+  <div class="toolbar" style="justify-content:space-between">
+   <span class="hint">Selected songs stay in the list until you return them or reload the app.</span>
+   <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="secondary" id="export">Export selected list</button>
+    <button class="secondary" id="returnAll">Return all</button>
+   </div>
+  </div>
+ </div>
+
+ <!-- CARD GENERATOR VIEW -->
+ <div id="cardGenView" class="view-section">
+  <div class="card-config">
+   <div class="field-group">
+    <label for="cardTitle">Card Title</label>
+    <input type="text" id="cardTitle" value="MUSIC BINGO">
+   </div>
+   <div class="field-group">
+    <label for="gridSize">Grid Size</label>
+    <select id="gridSize">
+     <option value="3">3x3 (9 Songs)</option>
+     <option value="4">4x4 (16 Songs)</option>
+     <option value="5" selected>5x5 (25 Songs)</option>
+    </select>
+   </div>
+   <div class="field-group">
+    <label for="freeSpace">Center Free Space</label>
+    <select id="freeSpace">
+     <option value="yes">Yes (5x5 & 3x3 only)</option>
+     <option value="no">No</option>
+    </select>
+   </div>
+   <div class="field-group">
+    <label for="cardCount">Number of Cards</label>
+    <input type="number" id="cardCount" min="1" max="50" value="5">
+   </div>
+   <div class="field-group">
+    <label for="songSource">Song Pool Source</label>
+    <select id="songSource">
+     <option value="all">All Loaded Songs</option>
+     <option value="selected">Selected Songs Only</option>
+    </select>
+   </div>
+   <button class="primary" onclick="generateCards()">Generate Cards</button>
+   <button class="green" onclick="window.print()">🖨️ Print Cards</button>
+  </div>
+
+  <div class="cards-container" id="cardsContainer">
+   <div class="empty">Click "Generate Cards" above to create unique bingo cards.</div>
+  </div>
+ </div>
+
+ <!-- PLAYER DIRECT SINGLE CARD VIEW -->
+ <div id="playerCardView" class="view-section">
+  <div style="max-width:450px;margin:auto">
+   <div id="singleCardContainer"></div>
+   <div style="text-align:center;margin-top:16px">
+    <span class="hint">Tap cells to mark/unmark songs as they play!</span>
+   </div>
+  </div>
+ </div>
+
+ <div class="footer">Privacy: folder selection, ID3 parsing, and playback happen locally in your browser.</div>
+</div>
+
+<!-- QR MODAL -->
+<div class="modal-overlay" id="qrModal" onclick="closeModal()">
+ <div class="modal" onclick="event.stopPropagation()">
+  <h3>Scan to Play</h3>
+  <div id="qrcode"></div>
+  <button class="secondary" onclick="closeModal()" style="width:100%">Close</button>
+ </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let available=[], selected=[], currentId=null, nextId=1, currentUrl=null;
+const audio=$('audio');
+
+const titleOfFile=f=>f.name.replace(/\.[^/.]+$/, '');
+const displayTitleOf=item=>item.title?(item.artist?`${item.title} — ${item.artist}`:item.title):titleOfFile(item.file);
+const sizeOf=n=>n<1024*1024?(n/1024).toFixed(0)+' KB':(n/1024/1024).toFixed(1)+' MB';
+
+function switchTab(tabId){
+ document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+ document.querySelectorAll('.view-section').forEach(v=>v.classList.remove('active'));
+ event.target.classList.add('active');
+ $(tabId).classList.add('active');
+}
+
+function render(){
+ const q=$('search').value.trim().toLowerCase();
+ const shown=available.filter(x=>displayTitleOf(x).toLowerCase().includes(q));
+ $('availableCount').textContent=available.length+' songs';
+ $('selectedCount').textContent=selected.length+' songs';
+ const totalLoaded = available.length + selected.length;
+ $('folderStatus').textContent = totalLoaded > 0 ? `${totalLoaded} MP3 file(s) loaded` : 'No folder loaded';
+ $('availableList').innerHTML=shown.length?'':'<div class="empty">'+(available.length?'No matching songs.':'No available songs.')+'</div>';
+ shown.forEach((x,i)=>$('availableList').appendChild(songRow(x,'available',i)));
+ $('selectedList').innerHTML=selected.length?'':'<div class="empty">Songs you move here will appear in this list.</div>';
+ selected.forEach((x,i)=>$('selectedList').appendChild(songRow(x,'selected',i)));
+ $('moveCurrent').disabled=!currentId||!available.some(x=>x.id===currentId);
+}
+
+function songRow(item,where,index){
+ const row=document.createElement('div');row.className='song'+(item.id===currentId?' active':'');
+ const num=document.createElement('div');num.className='songnum';num.textContent=index+1;
+ const info=document.createElement('div');info.className='songinfo';
+ const name=document.createElement('div');name.className='songname';name.textContent=displayTitleOf(item);
+ const meta=document.createElement('div');meta.className='songmeta';meta.textContent=sizeOf(item.file.size);
+ info.append(name,meta);
+ const play=document.createElement('button');play.className='secondary';play.textContent='▶ Play';play.onclick=()=>playSong(item);
+ const move=document.createElement('button');move.className=where==='available'?'green':'secondary';move.textContent=where==='available'?'Move →':'← Return';move.onclick=()=>where==='available'?moveSelected(item.id):returnAvailable(item.id);
+ row.append(num,info,play,move);return row;
+}
+
+function playSong(item){
+ currentId=item.id;
+ if(currentUrl)URL.revokeObjectURL(currentUrl);
+ currentUrl=URL.createObjectURL(item.file);
+ audio.src=currentUrl;
+ $('nowPlaying').textContent=displayTitleOf(item);
+ audio.play().catch(err=>console.log(err));
+ render();
+}
+
+function moveSelected(id){
+ const idx=available.findIndex(x=>x.id===id);if(idx<0)return;
+ const [item]=available.splice(idx,1);selected.push(item);
+ render();
+}
+
+function returnAvailable(id){
+ const idx=selected.findIndex(x=>x.id===id);if(idx<0)return;
+ available.push(selected.splice(idx,1)[0]);render();
+}
+
+function shuffleAndPlay(){
+ if(available.length===0){alert('No available songs left!');return;}
+ const item=available[Math.floor(Math.random()*available.length)];
+ playSong(item);moveSelected(item.id);
+}
+
+// ID3 Tag Parsing
+function parseID3Tags(file){
+ return new Promise(resolve=>{
+  if(!window.jsmediatags){resolve({title:null,artist:null});return;}
+  window.jsmediatags.read(file,{
+   onSuccess:tag=>{
+    const title=tag.tags.title?tag.tags.title.trim():null;
+    const artist=tag.tags.artist?tag.tags.artist.trim():null;
+    resolve({title,artist});
+   },
+   onError:()=>resolve({title:null,artist:null})
+  });
+ });
+}
+
+$('folder').addEventListener('change', async e=>{
+ const files=Array.from(e.target.files).filter(f=>f.name.toLowerCase().endsWith('.mp3')&&!f.name.startsWith('._'));
+ if(files.length===0){alert('No MP3 files found.');return;}
+ available=[];selected=[];currentId=null;audio.pause();audio.removeAttribute('src');
+ $('nowPlaying').textContent='Reading ID3 Tags…';
+ 
+ for(const file of files){
+  const tags=await parseID3Tags(file);
+  available.push({id:nextId++,file,name:file.name,title:tags.title,artist:tags.artist});
+ }
+ $('nowPlaying').textContent='Choose a song from Available Songs';
+ render();
+});
+
+// Bingo Card Generation
+function generateCards(){
+ const poolSource=$('songSource').value;
+ const pool=(poolSource==='selected'?selected:available.concat(selected)).map(x=>displayTitleOf(x));
+ const size=parseInt($('gridSize').value);
+ const totalNeeded=size*size;
+ const useFree=$('freeSpace').value==='yes'&&(size===3||size===5);
+
+ if(pool.length<(useFree?totalNeeded-1:totalNeeded)){
+  alert(`You need at least ${useFree?totalNeeded-1:totalNeeded} songs to fill a ${size}x${size} card.`);
+  return;
+ }
+
+ const cardCount=parseInt($('cardCount').value);
+ const container=$('cardsContainer');
+ container.innerHTML='';
+
+ for(let c=1;c<=cardCount;c++){
+  const shuffled=[...pool].sort(()=>Math.random()-0.5);
+  const cardData={title:$('cardTitle').value,size,id:c,songs:shuffled.slice(0,useFree?totalNeeded-1:totalNeeded),useFree};
+  container.appendChild(createCardElement(cardData));
+ }
+}
+
+function createCardElement(data){
+ const card=document.createElement('div');card.className='bingo-card';
+ const header=document.createElement('div');header.className='card-header';
+ header.innerHTML=`<div class="card-title">${data.title}</div><div class="card-id">Card #${data.id}</div>`;
+ 
+ const grid=document.createElement('div');grid.className=`bingo-grid size-${data.size}`;
+ const centerIndex=data.useFree?Math.floor((data.size*data.size)/2):-1;
+ let songIdx=0;
+
+ for(let i=0;i<data.size*data.size;i++){
+  const cell=document.createElement('div');cell.className='bingo-cell';
+  if(i===centerIndex){
+   cell.classList.add('free');cell.textContent='FREE SPACE';
+  }else{
+   cell.textContent=data.songs[songIdx++];
+   cell.onclick=()=>cell.classList.toggle('marked');
+  }
+  grid.appendChild(cell);
+ }
+
+ const actions=document.createElement('div');actions.className='card-actions';
+ const cardHash=btoa(encodeURIComponent(JSON.stringify(data)));
+ const fullUrl=`${location.protocol}//${location.host}${location.pathname}?card=${cardHash}`;
+ 
+ actions.innerHTML=`
+  <button class="secondary" style="flex:1" onclick="showQR('${fullUrl}')">📱 QR Code</button>
+  <button class="secondary" style="flex:1" onclick="navigator.clipboard.writeText('${fullUrl}');alert('Link copied to clipboard!')">🔗 Copy Link</button>
+ `;
+
+ card.append(header,grid,actions);
+ return card;
+}
+
+function showQR(url){
+ $('qrcode').innerHTML='';
+ new QRCode($('qrcode'),{text:url,width:180,height:180});
+ $('qrModal').classList.add('active');
+}
+function closeModal(){$('qrModal').classList.remove('active');}
+
+// Check for Direct Player URL Card
+window.addEventListener('load',()=>{
+ const params=new URLSearchParams(window.location.search);
+ if(params.has('card')){
+  try{
+   const cardData=JSON.parse(decodeURIComponent(atob(params.get('card'))));
+   $('mainHeader').style.display='none';
+   $('appTabs').style.display='none';
+   document.querySelectorAll('.view-section').forEach(v=>v.classList.remove('active'));
+   $('playerCardView').classList.add('active');
+   $('singleCardContainer').appendChild(createCardElement(cardData));
+  }catch(e){console.error("Invalid card URL");}
+ }
+});
+
+$('moveCurrent').onclick=()=>{if(currentId)moveSelected(currentId)};
+$('shuffleBtn').onclick=shuffleAndPlay;
+$('search').oninput=render;
+$('clearSearch').onclick=()=>{$('search').value='';render()};
+$('returnAll').onclick=()=>{available.push(...selected);selected=[];render()};
+$('export').onclick=()=>{
+ const text=selected.map((x,i)=>`${i+1}. ${displayTitleOf(x)}`).join('\n');
+ if(!text){alert('No selected songs to export.');return;}
+ const blob=new Blob([text],{type:'text/plain'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=url;a.download='selected-songs.txt';a.click();URL.revokeObjectURL(url);
+};
+render();
+</script>
+</body>
+</html>
