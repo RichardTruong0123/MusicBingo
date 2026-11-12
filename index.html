@@ -78,7 +78,7 @@
   }
 </style>
 </head>
-<body class="p-4 md:p-8">
+<body class="p-3 md:p-8">
 
 <div class="max-w-7xl mx-auto space-y-6">
 
@@ -98,11 +98,11 @@
   </header>
 
   <!-- ==================== TAB NAVIGATION (No Print) ==================== -->
-  <div id="appTabs" class="flex border-b border-slate-200 no-print">
-    <button id="tabManagerBtn" onclick="switchTab('managerView')" class="py-3 px-6 font-semibold text-sm border-b-2 border-blue-600 text-blue-600 flex items-center gap-2 transition-colors">
+  <div id="appTabs" class="flex border-b border-slate-200 no-print overflow-x-auto">
+    <button id="tabManagerBtn" onclick="switchTab('managerView')" class="py-3 px-6 font-semibold text-sm border-b-2 border-blue-600 text-blue-600 flex items-center gap-2 transition-colors whitespace-nowrap">
       <span>🎵 Song Manager & Player</span>
     </button>
-    <button id="tabCardsBtn" onclick="switchTab('cardGenView')" class="py-3 px-6 font-semibold text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition-colors">
+    <button id="tabCardsBtn" onclick="switchTab('cardGenView')" class="py-3 px-6 font-semibold text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition-colors whitespace-nowrap">
       <span>🎲 Bingo Cards Generator</span>
       <span id="cardBadge" class="bg-slate-200 text-slate-700 rounded-full px-2 py-0.5 text-xs font-bold">0 Songs</span>
     </button>
@@ -269,7 +269,7 @@
 
   <!-- ==================== PLAYER DIRECT SINGLE CARD VIEW ==================== -->
   <div id="playerCardView" class="view-section hidden max-w-xl mx-auto space-y-4 no-print py-4">
-    <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
+    <div class="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200 shadow-sm space-y-4">
       <div id="singleCardContainer"></div>
       <div class="pt-2 text-center border-t border-slate-100">
         <span class="text-xs text-slate-400">Tap cells to mark/unmark songs as they play!</span>
@@ -320,11 +320,11 @@ function switchTab(tabId){
  const cardsBtn = $('tabCardsBtn');
  
  if(tabId === 'managerView'){
-   managerBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-blue-600 text-blue-600 flex items-center gap-2 transition-colors";
-   cardsBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition-colors";
+   managerBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-blue-600 text-blue-600 flex items-center gap-2 transition-colors whitespace-nowrap";
+   cardsBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition-colors whitespace-nowrap";
  } else {
-   cardsBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-blue-600 text-blue-600 flex items-center gap-2 transition-colors";
-   managerBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition-colors";
+   cardsBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-blue-600 text-blue-600 flex items-center gap-2 transition-colors whitespace-nowrap";
+   managerBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition-colors whitespace-nowrap";
  }
 
  $(tabId).classList.remove('hidden');
@@ -463,19 +463,19 @@ function generateCards(){
 
 function createCardElement(data){
  const card=document.createElement('div');
- card.className='bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4';
+ card.className='bg-white rounded-2xl p-4 sm:p-6 border border-slate-200 shadow-sm space-y-4';
 
  const header=document.createElement('div');
  header.className='flex justify-between items-center border-b border-slate-100 pb-3';
  header.innerHTML=`
-   <div class="flex items-center gap-3">
-     <h3 class="font-heading text-2xl font-bold tracking-wider text-slate-800">${data.title}</h3>
-     <span class="text-xs font-bold bg-slate-100 text-slate-600 px-3 py-1 rounded-full">Card #${data.id}</span>
+   <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+     <h3 class="font-heading text-xl sm:text-2xl font-bold tracking-wider text-slate-800 truncate">${data.title}</h3>
+     <span class="text-[10px] sm:text-xs font-bold bg-slate-100 text-slate-600 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full whitespace-nowrap">Card #${data.id}</span>
    </div>
  `;
  
  const grid=document.createElement('div');
- grid.className=`grid gap-2 grid-cols-${data.size}`;
+ grid.className=`grid gap-1.5 sm:gap-2 grid-cols-${data.size}`;
  grid.style.gridTemplateColumns = `repeat(${data.size}, minmax(0, 1fr))`;
 
  const centerIndex=data.useFree?Math.floor((data.size*data.size)/2):-1;
@@ -484,14 +484,14 @@ function createCardElement(data){
  for(let i=0;i<data.size*data.size;i++){
   const cell=document.createElement('div');
   const isFree = i === centerIndex;
-  // Improved hover & marked classes using soft, clear amber/gold tones
-  cell.className=`p-3 min-h-[70px] flex items-center justify-center text-center text-xs font-semibold rounded-xl border transition-all cursor-pointer select-none ${
+  // Responsive font sizes: text-[9px] on small mobile screens, text-xs on tablets/desktop
+  cell.className=`p-1.5 sm:p-3 min-h-[55px] sm:min-h-[70px] flex items-center justify-center text-center text-[9px] sm:text-xs font-semibold rounded-lg sm:rounded-xl border transition-all cursor-pointer select-none leading-tight overflow-hidden ${
     isFree 
       ? 'bg-amber-100 border-amber-300 text-amber-900 font-bold' 
       : 'bg-white hover:bg-amber-50 hover:border-amber-300 border-slate-200 text-slate-700 shadow-2xs'
   }`;
   if(isFree){
-   cell.textContent='★ FREE SPACE ★';
+   cell.textContent='★ FREE ★';
   }else{
    cell.textContent=data.songs[songIdx++];
    cell.onclick=()=> {
@@ -595,20 +595,20 @@ window.addEventListener('load',()=>{
    container.innerHTML = '';
    
    const cardWrapper = document.createElement('div');
-   cardWrapper.className = 'bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4';
+   cardWrapper.className = 'bg-white rounded-2xl p-4 sm:p-6 border border-slate-200 shadow-sm space-y-4';
    
    const header = document.createElement('div');
    header.className = 'flex justify-between items-center border-b border-slate-100 pb-3';
    header.innerHTML = `
      <div>
-       <h1 class="font-heading text-3xl font-bold tracking-wider text-slate-800">${cardData.title}</h1>
+       <h1 class="font-heading text-2xl sm:text-3xl font-bold tracking-wider text-slate-800">${cardData.title}</h1>
        <p class="text-xs text-slate-400 mt-0.5">Tap squares as songs are called to mark your card!</p>
      </div>
-     <span class="text-xs font-bold bg-blue-100 text-blue-800 px-3 py-1 rounded-full">Card #${cardData.id}</span>
+     <span class="text-xs font-bold bg-blue-100 text-blue-800 px-3 py-1 rounded-full whitespace-nowrap">Card #${cardData.id}</span>
    `;
    
    const grid = document.createElement('div');
-   grid.className = `grid gap-2 grid-cols-${cardData.size}`;
+   grid.className = `grid gap-1.5 sm:gap-2 grid-cols-${cardData.size}`;
    grid.style.gridTemplateColumns = `repeat(${cardData.size}, minmax(0, 1fr))`;
    
    const centerIndex = cardData.useFree ? Math.floor((cardData.size * cardData.size) / 2) : -1;
@@ -618,7 +618,7 @@ window.addEventListener('load',()=>{
      const isFree = i === centerIndex;
      const text = isFree ? '★ FREE SPACE ★' : cardData.songs[songIdx++];
      const cellEl = document.createElement('div');
-     cellEl.className = `p-3 min-h-[75px] flex items-center justify-center text-center text-xs font-semibold rounded-xl border transition-all cursor-pointer select-none ${
+     cellEl.className = `p-1.5 sm:p-3 min-h-[60px] sm:min-h-[75px] flex items-center justify-center text-center text-[9px] sm:text-xs font-semibold rounded-lg sm:rounded-xl border transition-all cursor-pointer select-none leading-tight overflow-hidden ${
        isFree 
          ? 'bg-amber-100 border-amber-300 text-amber-900 font-bold' 
          : 'bg-white hover:bg-amber-50 hover:border-amber-300 border-slate-200 text-slate-700 shadow-2xs'
