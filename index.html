@@ -152,7 +152,7 @@
       <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
         <span>♫ Music Bingo</span>
       </h1>
-      <p class="text-sm text-slate-500 mt-1">Load your MP3 library, run game sessions, generate cards, sync lyrics, and manage LRC files[cite: 3, 4].</p>
+      <p class="text-sm text-slate-500 mt-1">Load your MP3 library, run game sessions, generate cards, sync lyrics, and manage LRC files.</p>
     </div>
     <div class="flex items-center gap-2">
       <span class="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs font-bold uppercase tracking-wider">
@@ -589,7 +589,7 @@
       <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
         <div>
           <h2 class="text-xl font-bold text-slate-800">LRC Manager & LRCLIB Bulk Search</h2>
-          <p class="text-sm text-slate-500 mt-0.5">Automatically uses MP3 files loaded in Song Manager to fetch synchronized lyrics from LRCLIB[cite: 4] and save them right back into your song folder.</p>
+          <p class="text-sm text-slate-500 mt-0.5">Automatically uses MP3 files loaded in Song Manager to fetch synchronized lyrics from LRCLIB, save them to your folder, and sync them immediately with LyricSync.</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <button id="lrcLookupBtn" disabled class="bg-blue-600 hover:bg-blue-700 disabled:opacity-45 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-2">
@@ -684,7 +684,7 @@
   </div>
 
   <div class="text-xs text-slate-400 text-center py-4 no-print">
-    Privacy: folder selection, ID3 parsing, and playback happen locally in your browser. Lyrics retrieved from LRCLIB[cite: 4].
+    Privacy: folder selection, ID3 parsing, and playback happen locally in your browser. Lyrics retrieved from LRCLIB.
   </div>
 
 </div>
@@ -878,11 +878,7 @@ $('folder').addEventListener('change', async e=>{
  const files=rawFiles.filter(f=>f.name.toLowerCase().endsWith('.mp3')&&!f.name.startsWith('._'));
  if(files.length===0){alert('No MP3 files found.');return;}
 
- // Try to capture directory handle if supported
- if(window.showDirectoryPicker && e.target.files && e.target.files[0] && e.target.files[0].handle) {
-   // Some browsers provide handle inside File object
-   cachedDirectoryHandle = await e.target.files[0].handle.getParent ? null : null; // fallback via picker if needed
- }
+ cachedDirectoryHandle = null;
 
  const lyricFiles = rawFiles.filter(f => /\.(lrc|txt)$/i.test(f.name) && !f.name.startsWith('._'));
  if (typeof lsState !== 'undefined' && lyricFiles.length > 0) {
@@ -911,16 +907,41 @@ $('folder').addEventListener('change', async e=>{
 function durationText(s){if(!Number.isFinite(s))return "—";let m=Math.floor(s/60),r=Math.floor(s%60);return `${m}:${String(r).padStart(2,"0")}`}
 function lrcSafeName(s){return (s||"Unknown").replace(/[\\/:*?"<>|]/g,"_").trim()}
 
+// Helper to immediately register saved LRC lyrics in memory so no folder reload is needed!
+function registerSavedLrcInMemory(mp3FileName, lrcFilename, lrcText) {
+ const stem = mp3FileName.replace(/\.[^/.]+$/, '').trim().toLowerCase();
+ const lrcFileObj = new File([lrcText], lrcFilename, { type: "text/plain;charset=utf-8" });
+ 
+ if (typeof lsState !== 'undefined') {
+   lsState.lyricFileRegistry.set(stem, { file: lrcFileObj, ext: 'lrc' });
+
+   // If this track is currently loaded in LyricSync or Song Manager, update lyrics live!
+   const currentTrack = available.find(x => x.id === currentId) || selected.find(x => x.id === currentId);
+   if (currentTrack) {
+     const currentStem = currentTrack.file.name.replace(/\.[^/.]+$/, '').trim().toLowerCase();
+     if (currentStem === stem) {
+       lsLoadLyricsIntoApp(lrcText, lrcFilename, true);
+       lsUpdateLrcMatchBadge('matched', `Synced: ${lrcFilename}`);
+     }
+   }
+ }
+}
+
 async function syncLrcTracksFromManager(){
  const allSongs=[...available,...selected];
+ const prevMap = new Map(lrcTracks.map(t => [t.file.name, t]));
  lrcTracks=[];
  if(!allSongs.length){
   lrcRender();
   return;
-}
+ }
  $('lrcLog').textContent=`Preparing ${allSongs.length} tracks for LRC lookup…`;
  for(let i=0;i<allSongs.length;i++){
   const s=allSongs[i];
+  if(prevMap.has(s.file.name)){
+   lrcTracks.push(prevMap.get(s.file.name));
+   continue;
+  }
   let duration=s.duration;
   if(duration==undefined){
    duration=await readDuration(s.file);
@@ -935,7 +956,7 @@ async function syncLrcTracksFromManager(){
    syncedLyrics: null
   });
  }
- $('lrcLog').textContent=`Synced ${lrcTracks.length} tracks from Song Manager. Click "Find LRC for all loaded songs" to begin[cite: 4].`;
+ $('lrcLog').textContent=`Synced ${lrcTracks.length} tracks from Song Manager. Click "Find LRC for all loaded songs" to begin.`;
  lrcRender();
 }
 
@@ -1030,6 +1051,9 @@ async function lrcLookupOne(i){
    const best=candidates[0];
    t.syncedLyrics=best.syncedLyrics;
    t.status="Found";
+
+   // Immediately register in memory as soon as found so LyricSync knows about it even before saving!
+   registerSavedLrcInMemory(t.file.name, lrcFilename(t), best.syncedLyrics);
   }
  }catch(e){
   t.status="Error";
@@ -1043,12 +1067,12 @@ $('lrcLookupBtn').onclick=async()=>{
  let pending=lrcTracks.map((t,i)=>({t,i})).filter(x=>!x.t.syncedLyrics);
  for(let n=0;n<pending.length;n++){
   let {i}=pending[n];
-  $('lrcLog').textContent=`Searching ${n+1} of ${pending.length}: ${lrcTracks[i].title} — ${lrcTracks[i].artist}[cite: 4]`;
+  $('lrcLog').textContent=`Searching ${n+1} of ${pending.length}: ${lrcTracks[i].title} — ${lrcTracks[i].artist}`;
   await lrcLookupOne(i);
   $('lrcProgressBar').style.width=`${Math.round((n+1)/pending.length*100)}%`;
   if(n<pending.length-1)await new Promise(r=>setTimeout(r,350));
  }
- $('lrcLog').textContent=`Search complete. Review matches, preview lyrics, and save[cite: 4].`;
+ $('lrcLog').textContent=`Search complete. Lyrics are immediately synced with LyricSync—save to your folder whenever ready.`;
  $('lrcLookupBtn').disabled=false;
  lrcUpdateStats();
 };
@@ -1056,10 +1080,20 @@ $('lrcLookupBtn').onclick=async()=>{
 function lrcFilename(t){return lrcSafeName(t.file.name.replace(/\.[^/.]+$/, ''))+".lrc"}
 
 async function getTargetDirectoryHandle(){
+ if(cachedDirectoryHandle){
+  try{
+   const perm = await cachedDirectoryHandle.queryPermission({mode: 'readwrite'});
+   if(perm === 'granted') return cachedDirectoryHandle;
+   const req = await cachedDirectoryHandle.requestPermission({mode: 'readwrite'});
+   if(req === 'granted') return cachedDirectoryHandle;
+  }catch(e){
+   cachedDirectoryHandle = null;
+  }
+ }
  if(window.showDirectoryPicker){
   try{
-   // If user already picked a directory before, prompt to pick or reuse
    const dirHandle = await window.showDirectoryPicker({mode: 'readwrite'});
+   cachedDirectoryHandle = dirHandle;
    return dirHandle;
   }catch(e){
    console.warn("Directory picker cancelled or unsupported:", e);
@@ -1070,29 +1104,32 @@ async function getTargetDirectoryHandle(){
 }
 
 async function lrcSaveOneToFolder(t){
+ const filename = lrcFilename(t);
+ // Ensure memory registry is updated immediately
+ registerSavedLrcInMemory(t.file.name, filename, t.syncedLyrics);
+
  const dirHandle = await getTargetDirectoryHandle();
  if(!dirHandle){
-  // Fallback download if user cancels directory picker
   const blob = new Blob([t.syncedLyrics], {type:"text/plain;charset=utf-8"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = lrcFilename(t);
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 1500);
+  lsShowToast(`Downloaded ${filename} & synced in memory!`, 'success');
   return;
  }
 
  try{
-  const filename = lrcFilename(t);
   const fileHandle = await dirHandle.getFileHandle(filename, {create: true});
   const writable = await fileHandle.createWritable();
   await writable.write(t.syncedLyrics);
   await writable.close();
-  $('lrcLog').textContent = `Successfully saved ${filename} to song folder!`;
-  alert(`Saved ${filename} directly to your song folder!`);
+  $('lrcLog').textContent = `Saved ${filename} to folder and synced in LyricSync!`;
+  lsShowToast(`Saved ${filename} to song folder & synced!`, 'success');
  }catch(err){
   console.error("Error writing file:", err);
   alert("Failed to write file to folder: " + err.message);
@@ -1102,6 +1139,9 @@ async function lrcSaveOneToFolder(t){
 $('lrcSaveAllFolderBtn').onclick=async()=>{
  const found = lrcTracks.filter(t=>t.syncedLyrics);
  if(!found.length){alert('No found lyrics to save.');return;}
+
+ // Register all in memory immediately
+ found.forEach(t => registerSavedLrcInMemory(t.file.name, lrcFilename(t), t.syncedLyrics));
 
  const dirHandle = await getTargetDirectoryHandle();
  if(!dirHandle) return;
@@ -1125,8 +1165,8 @@ $('lrcSaveAllFolderBtn').onclick=async()=>{
   }
  }
 
- $('lrcLog').textContent = `Successfully saved ${savedCount} .lrc files directly to your song folder!`;
- alert(`Successfully saved ${savedCount} .lrc files into your folder!`);
+ $('lrcLog').textContent = `Saved ${savedCount} .lrc files to folder — all lyrics are already active in LyricSync without reloading!`;
+ lsShowToast(`Saved ${savedCount} .lrc files & synced in LyricSync!`, 'success');
  $('lrcSaveAllFolderBtn').disabled = false;
 };
 
@@ -1967,6 +2007,9 @@ function renderManagerLibraryDrawer() {
   lsDom.libraryItems.innerHTML = '';
   allSongs.forEach((song, idx) => {
     const title = displayTitleOf(song);
+    const stem = song.file.name.replace(/\.[^/.]+$/, '').trim().toLowerCase();
+    const hasLrc = lsState.lyricFileRegistry.has(stem);
+    
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = `w-full text-left px-2.5 py-2 rounded-xl flex items-center justify-between gap-2 text-xs transition text-slate-700 hover:bg-slate-50`;
@@ -1975,12 +2018,13 @@ function renderManagerLibraryDrawer() {
       <div class="flex items-center gap-2 min-w-0">
         <span class="font-mono-code text-[11px] text-slate-400">${String(idx + 1).padStart(2, '0')}</span>
         <span class="truncate font-medium">${title}</span>
+        ${hasLrc ? '<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 shrink-0">.LRC</span>' : ''}
       </div>
       <span class="shrink-0 px-2 py-0.5 rounded text-[10px] font-mono-code bg-blue-100 text-blue-700 font-bold">Play</span>
     `;
 
     btn.addEventListener('click', () => {
-      playSong(song.id);
+      playSong(song);
     });
 
     lsDom.libraryItems.appendChild(btn);
@@ -2046,17 +2090,25 @@ function lsExportLrcFile() {
     lsShowToast('Nothing to export! Add lyrics first.', 'warning');
     return;
   }
+  const safeTitle = (lsDom.trackTitle.textContent || 'lyrics').replace(/[^a-z0-9_\-\s]/gi, '').trim().replace(/\s+/g, '_');
+  const filename = `${safeTitle || 'synchronized_lyrics'}.lrc`;
+  
+  // Register in memory if matching current track
+  const currentTrack = available.find(x => x.id === currentId) || selected.find(x => x.id === currentId);
+  if (currentTrack) {
+    registerSavedLrcInMemory(currentTrack.file.name, filename, content);
+  }
+
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const safeTitle = (lsDom.trackTitle.textContent || 'lyrics').replace(/[^a-z0-9_\-\s]/gi, '').trim().replace(/\s+/g, '_');
   a.href = url;
-  a.download = `${safeTitle || 'synchronized_lyrics'}.lrc`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  lsShowToast(`Exported ${a.download}`, 'success');
+  lsShowToast(`Exported ${filename}`, 'success');
 }
 
 function lsResizeVisualizerCanvas() {
