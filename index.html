@@ -159,8 +159,8 @@
     </div>
   </header>
 
-  <!-- ==================== TAB NAVIGATION (No Print) ==================== -->
-  <div id="appTabs" class="flex border-b border-slate-200 no-print overflow-x-auto">
+  <!-- ==================== TAB NAVIGATION (Sticky Header) ==================== -->
+  <div id="appTabs" class="sticky top-0 z-30 bg-[#f3f5f8]/95 backdrop-blur-md flex border-b border-slate-200 no-print overflow-x-auto shadow-xs py-1">
     <button id="tabManagerBtn" onclick="switchTab('managerView')" class="py-3 px-6 font-semibold text-sm border-b-2 border-blue-600 text-blue-600 flex items-center gap-2 transition-colors whitespace-nowrap">
       <span>🎵 Song Manager & Player</span>
     </button>
@@ -1893,6 +1893,7 @@ $('moveCurrent').onclick=()=>{if(currentId)moveSelected(currentId)};
 $('shuffleBtn').onclick=shuffleAndPlay;
 $('search').oninput=render;
 $('clearSearch').onclick=()=>{$('search').value='';render()};
+$('returnAll').onerror=null;
 $('returnAll').onclick=()=>{available.push(...selected);selected=[];render();updateCardHighlights();};
 $('export').onclick=()=>{
  const text=selected.map((x,i)=>`${i+1}. ${displayTitleOf(x)}`).join('\n');
