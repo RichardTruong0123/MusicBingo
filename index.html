@@ -150,7 +150,7 @@
       <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
         <span>♫ Music Bingo</span>
       </h1>
-      <p class="text-sm text-slate-500 mt-1">Load your MP3 library, run the game session, generate printable bingo cards, and sync karaoke lyrics[cite: 3].</p>
+      <p class="text-sm text-slate-500 mt-1">Load your MP3 library, run the game session, generate printable bingo cards, and sync karaoke lyrics.</p>
     </div>
     <div class="flex items-center gap-2">
       <span class="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs font-bold uppercase tracking-wider">
@@ -1884,24 +1884,107 @@ function lsBindEvents() {
   });
 }
 
-// Initialize App
-lsBindEvents();
-lsActivateDemoTrack();
-lsRenderVisualizerLoop();
+// Standalone Card URL Loader (Fixes QR code parameter reading)
+window.addEventListener('DOMContentLoaded', () => {
+  const params = new URLSearchParams(window.location.search);
+  const cardParam = params.get('card') || params.get('cardData');
+  
+  if (cardParam) {
+    try {
+      let jsonString;
+      try {
+        jsonString = decodeURIComponent(escape(atob(cardParam)));
+      } catch (_) {
+        jsonString = decodeURIComponent(cardParam);
+      }
+      const cardData = JSON.parse(jsonString);
+
+      $('mainHeader').style.display = 'none';
+      $('appTabs').style.display = 'none';
+      document.querySelectorAll('.view-section').forEach(v => v.classList.add('hidden'));
+      document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
+      
+      const pView = $('playerCardView');
+      pView.classList.remove('hidden');
+      pView.classList.add('active');
+
+      const container = $('singleCardContainer');
+      container.innerHTML = '';
+
+      const cardWrapper = document.createElement('div');
+      cardWrapper.className = 'bg-white rounded-2xl p-4 sm:p-6 border border-slate-200 shadow-sm space-y-4';
+
+      const header = document.createElement('div');
+      header.className = 'flex justify-between items-center border-b border-slate-100 pb-3';
+      header.innerHTML = `
+        <div>
+          <h1 class="font-heading text-2xl sm:text-3xl font-bold tracking-wider text-slate-800">${cardData.title || cardData.t || 'MUSIC BINGO'}</h1>
+          <p class="text-xs text-slate-400 mt-0.5">Tap squares as songs are called to mark your card!</p>
+        </div>
+        <span class="text-xs font-bold bg-blue-100 text-blue-800 px-3 py-1 rounded-full whitespace-nowrap">Card #${cardData.id || cardData.n || 1}</span>
+      `;
+
+      const grid = document.createElement('div');
+      const size = cardData.size || cardData.g || 5;
+      grid.className = `grid gap-1.5 sm:gap-2 grid-cols-${size}`;
+      grid.style.gridTemplateColumns = `repeat(${size}, minmax(0, 1fr))`;
+
+      const songsList = cardData.songs || cardData.c || [];
+      const totalCells = size * size;
+      const centerIndex = (cardData.useFree !== false && size % 2 !== 0) ? Math.floor(totalCells / 2) : -1;
+      let songIdx = 0;
+
+      for (let i = 0; i < totalCells; i++) {
+        const isFree = i === centerIndex;
+        const text = isFree ? '★ FREE SPACE ★' : (songsList[songIdx++] || '★');
+        const cellEl = document.createElement('div');
+        cellEl.className = `p-1.5 sm:p-3 min-h-[60px] sm:min-h-[75px] flex items-center justify-center text-center text-[9px] sm:text-xs font-semibold rounded-lg sm:rounded-xl border transition-all cursor-pointer select-none leading-tight overflow-hidden ${
+          isFree 
+            ? 'bg-amber-100 border-amber-300 text-amber-900 font-bold' 
+            : 'bg-white hover:bg-amber-50 hover:border-amber-300 border-slate-200 text-slate-700 shadow-2xs'
+        }`;
+        cellEl.textContent = text;
+
+        if (!isFree) {
+          cellEl.onclick = () => {
+            cellEl.classList.toggle('bg-amber-500');
+            cellEl.classList.toggle('text-white');
+            cellEl.classList.toggle('border-amber-600');
+            cellEl.classList.toggle('font-bold');
+            cellEl.classList.toggle('shadow-sm');
+            cellEl.classList.toggle('bg-white');
+            cellEl.classList.toggle('hover:bg-amber-50');
+          };
+        }
+        grid.appendChild(cellEl);
+      }
+
+      cardWrapper.append(header, grid);
+      container.appendChild(cardWrapper);
+      return;
+    } catch (e) {
+      console.error("Failed to parse standalone card URL:", e);
+    }
+  }
+
+  // Initialize App Normally
+  lsBindEvents();
+  lsActivateDemoTrack();
+  lsRenderVisualizerLoop();
+  render();
+});
 
 $('moveCurrent').onclick=()=>{if(currentId)moveSelected(currentId)};
 $('shuffleBtn').onclick=shuffleAndPlay;
 $('search').oninput=render;
 $('clearSearch').onclick=()=>{$('search').value='';render()};
-$('returnAll').onerror=null;
 $('returnAll').onclick=()=>{available.push(...selected);selected=[];render();updateCardHighlights();};
 $('export').onclick=()=>{
- const text=selected.map((x,i)=>`${i+1}. ${displayTitleOf(x)}`).join('\n');
+ const text=selected.map((x,i)=>`${i + 1}. ${displayTitleOf(x)}`).join('\n');
  if(!text){alert('No selected songs to export.');return;}
  const blob=new Blob([text],{type:'text/plain'}),url=URL.createObjectURL(blob),a=document.createElement('a');
  a.href=url;a.download='selected-songs.txt';a.click();URL.revokeObjectURL(url);
 };
-render();
 </script>
 </body>
 </html>
