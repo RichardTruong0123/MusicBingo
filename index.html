@@ -3,10 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>♫ Music Bingo — Manager, Card Generator & LyricSync</title>
+<title>♫ Music Bingo — Manager, Card Generator, LyricSync & LRC Manager</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <!-- jsmediatags CDN for reading ID3 metadata from MP3 files -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+<!-- JSZip CDN for bundling .lrc files -->
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <!-- QRCode.js CDN for client-side QR code generation -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -150,11 +152,11 @@
       <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
         <span>♫ Music Bingo</span>
       </h1>
-      <p class="text-sm text-slate-500 mt-1">Load your MP3 library, run the game session, generate printable bingo cards, and sync karaoke lyrics.</p>
+      <p class="text-sm text-slate-500 mt-1">Load your MP3 library, run game sessions, generate cards, sync lyrics, and manage LRC files[cite: 3, 4].</p>
     </div>
     <div class="flex items-center gap-2">
       <span class="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs font-bold uppercase tracking-wider">
-        Manager, Cards & LyricSync
+        Manager, Cards, LyricSync & LRCs
       </span>
     </div>
   </header>
@@ -171,6 +173,10 @@
     <button id="tabLyricSyncBtn" onclick="switchTab('lyricSyncView')" class="py-3 px-6 font-semibold text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition-colors whitespace-nowrap">
       <span>🎤 LyricSync Studio</span>
       <span class="bg-indigo-100 text-indigo-700 rounded-full px-2 py-0.5 text-[11px] font-bold">Library Synced</span>
+    </button>
+    <button id="tabLrcManagerBtn" onclick="switchTab('lrcManagerView')" class="py-3 px-6 font-semibold text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition-colors whitespace-nowrap">
+      <span>📑 LRC Manager</span>
+      <span class="bg-emerald-100 text-emerald-800 rounded-full px-2 py-0.5 text-[11px] font-bold">LRCLIB Sync</span>
     </button>
   </div>
 
@@ -575,6 +581,64 @@
 
   </div>
 
+  <!-- ==================== TAB 4: LRC MANAGER ==================== -->
+  <div id="lrcManagerView" class="view-section hidden space-y-6 no-print">
+    
+    <!-- LRC MANAGER TOOLBAR & STATS -->
+    <section class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+        <div>
+          <h2 class="text-xl font-bold text-slate-800">LRC Manager & LRCLIB Bulk Search</h2>
+          <p class="text-sm text-slate-500 mt-0.5">Automatically uses MP3 files loaded in Song Manager to fetch synchronized lyrics from LRCLIB[cite: 4] and save them right back into your song folder.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="lrcLookupBtn" disabled class="bg-blue-600 hover:bg-blue-700 disabled:opacity-45 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-2">
+            <span>🔍 Find LRC for all loaded songs</span>
+          </button>
+          <button id="lrcSaveAllFolderBtn" disabled class="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-45 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-2">
+            <span>💾 Save all found LRCs to song folder</span>
+          </button>
+          <button id="lrcZipBtn" disabled class="bg-slate-800 hover:bg-slate-900 disabled:opacity-45 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-2" title="Fallback Download as ZIP">
+            <span>📦 ZIP</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap gap-6 text-sm text-slate-600">
+        <span id="lrcStatTotal">0 MP3 tracks loaded</span>
+        <span id="lrcStatFound" class="text-emerald-700 font-semibold">0 lyrics found</span>
+        <span id="lrcStatMissing" class="text-amber-700 font-semibold">0 not found</span>
+      </div>
+
+      <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+        <div id="lrcProgressBar" class="bg-blue-600 h-full w-0 transition-all duration-150"></div>
+      </div>
+      <div id="lrcLog" class="text-xs font-mono-code text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200">Load a folder in Song Manager or select tracks to begin LRC lookup.</div>
+    </section>
+
+    <!-- LRC TABLE -->
+    <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse text-sm">
+          <thead>
+            <tr class="bg-slate-50/70 border-b border-slate-200 text-slate-600 text-xs uppercase tracking-wider">
+              <th class="p-3.5 text-left font-semibold">File / Track</th>
+              <th class="p-3.5 text-left font-semibold">Artist</th>
+              <th class="p-3.5 text-left font-semibold">Album</th>
+              <th class="p-3.5 text-left font-semibold">Duration</th>
+              <th class="p-3.5 text-left font-semibold">LRC Status</th>
+              <th class="p-3.5 text-right font-semibold">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="lrcRows" class="divide-y divide-slate-100">
+            <tr><td colspan="6" class="text-center py-12 text-slate-400 text-sm">No MP3 files loaded. Choose a folder in the Song Manager tab first.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </div>
+
   <!-- ==================== PLAYER DIRECT SINGLE CARD VIEW ==================== -->
   <div id="playerCardView" class="view-section hidden max-w-xl mx-auto space-y-4 no-print py-4">
     <div class="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200 shadow-sm space-y-4">
@@ -605,8 +669,22 @@
     </div>
   </div>
 
+  <!-- ==================== LRC PREVIEW MODAL ==================== -->
+  <div id="lrcPreviewModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden no-print" onclick="closeLrcModal()">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-xl border border-slate-100 flex flex-col max-h-[85vh]" onclick="event.stopPropagation()">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h3 id="lrcModalTitle" class="font-bold text-slate-800 text-base">Lyrics Preview</h3>
+        <button onclick="closeLrcModal()" class="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+      </div>
+      <pre id="lrcModalLyrics" class="flex-1 overflow-y-auto custom-scrollbar bg-slate-50 p-4 rounded-xl font-mono-code text-xs text-slate-700 whitespace-pre-wrap leading-relaxed border border-slate-200"></pre>
+      <div class="flex justify-end pt-2 border-t border-slate-100">
+        <button onclick="closeLrcModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div class="text-xs text-slate-400 text-center py-4 no-print">
-    Privacy: folder selection, ID3 parsing, and playback happen locally in your browser.
+    Privacy: folder selection, ID3 parsing, and playback happen locally in your browser. Lyrics retrieved from LRCLIB[cite: 4].
   </div>
 
 </div>
@@ -614,6 +692,8 @@
 <script>
 const $=id=>document.getElementById(id);
 let available=[], selected=[], currentId=null, nextId=1, currentUrl=null;
+let lrcTracks=[];
+let cachedDirectoryHandle = null;
 const audio=$('audio');
 
 const titleOfFile=f=>f.name.replace(/\.[^/.]+$/, '');
@@ -627,10 +707,12 @@ function switchTab(tabId){
  const managerBtn = $('tabManagerBtn');
  const cardsBtn = $('tabCardsBtn');
  const lyricSyncBtn = $('tabLyricSyncBtn');
+ const lrcManagerBtn = $('tabLrcManagerBtn');
  
  managerBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition-colors whitespace-nowrap";
  cardsBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition-colors whitespace-nowrap";
  lyricSyncBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition-colors whitespace-nowrap";
+ lrcManagerBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition-colors whitespace-nowrap";
  
  if(tabId === 'managerView'){
    managerBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-blue-600 text-blue-600 flex items-center gap-2 transition-colors whitespace-nowrap";
@@ -642,6 +724,9 @@ function switchTab(tabId){
    requestAnimationFrame(() => {
      if (typeof lsResizeVisualizerCanvas === 'function') lsResizeVisualizerCanvas();
    });
+ } else if(tabId === 'lrcManagerView'){
+   lrcManagerBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-blue-600 text-blue-600 flex items-center gap-2 transition-colors whitespace-nowrap";
+   syncLrcTracksFromManager();
  }
 
  $(tabId).classList.remove('hidden');
@@ -762,15 +847,29 @@ function shuffleAndPlay(){
 // ID3 Tag Parsing
 function parseID3Tags(file){
  return new Promise(resolve=>{
-  if(!window.jsmediatags){resolve({title:null,artist:null});return;}
+  if(!window.jsmediatags){resolve({title:null,artist:null,album:null});return;}
   window.jsmediatags.read(file,{
    onSuccess:tag=>{
-    const title=tag.tags.title?tag.tags.title.trim():null;
-    const artist=tag.tags.artist?tag.tags.artist.trim():null;
-    resolve({title,artist});
+    const t=tag.tags||{};
+    resolve({
+     title:t.title?t.title.trim():null,
+     artist:t.artist?t.artist.trim():null,
+     album:t.album?t.album.trim():null
+    });
    },
-   onError:()=>resolve({title:null,artist:null})
+   onError:()=>resolve({title:null,artist:null,album:null})
   });
+ });
+}
+
+function readDuration(file){
+ return new Promise(resolve=>{
+  let a=new Audio();
+  let u=URL.createObjectURL(file);
+  a.preload="metadata";
+  a.onloadedmetadata=()=>{let d=a.duration;URL.revokeObjectURL(u);resolve(Number.isFinite(d)?d:null)};
+  a.onerror=()=>{URL.revokeObjectURL(u);resolve(null)};
+  a.src=u;
  });
 }
 
@@ -778,6 +877,12 @@ $('folder').addEventListener('change', async e=>{
  const rawFiles=Array.from(e.target.files);
  const files=rawFiles.filter(f=>f.name.toLowerCase().endsWith('.mp3')&&!f.name.startsWith('._'));
  if(files.length===0){alert('No MP3 files found.');return;}
+
+ // Try to capture directory handle if supported
+ if(window.showDirectoryPicker && e.target.files && e.target.files[0] && e.target.files[0].handle) {
+   // Some browsers provide handle inside File object
+   cachedDirectoryHandle = await e.target.files[0].handle.getParent ? null : null; // fallback via picker if needed
+ }
 
  const lyricFiles = rawFiles.filter(f => /\.(lrc|txt)$/i.test(f.name) && !f.name.startsWith('._'));
  if (typeof lsState !== 'undefined' && lyricFiles.length > 0) {
@@ -793,11 +898,255 @@ $('folder').addEventListener('change', async e=>{
  
  for(const file of files){
   const tags=await parseID3Tags(file);
-  available.push({id:nextId++,file,name:file.name,title:tags.title,artist:tags.artist});
+  available.push({id:nextId++,file,name:file.name,title:tags.title,artist:tags.artist,album:tags.album});
  }
  $('nowPlaying').textContent='Choose a song from Available Songs';
  render();
+ if(activeMainTab==='lrcManagerView') syncLrcTracksFromManager();
 });
+
+// =========================================================================
+// ==================== LRC MANAGER INTEGRATION ============================
+// =========================================================================
+function durationText(s){if(!Number.isFinite(s))return "—";let m=Math.floor(s/60),r=Math.floor(s%60);return `${m}:${String(r).padStart(2,"0")}`}
+function lrcSafeName(s){return (s||"Unknown").replace(/[\\/:*?"<>|]/g,"_").trim()}
+
+async function syncLrcTracksFromManager(){
+ const allSongs=[...available,...selected];
+ lrcTracks=[];
+ if(!allSongs.length){
+  lrcRender();
+  return;
+}
+ $('lrcLog').textContent=`Preparing ${allSongs.length} tracks for LRC lookup…`;
+ for(let i=0;i<allSongs.length;i++){
+  const s=allSongs[i];
+  let duration=s.duration;
+  if(duration==undefined){
+   duration=await readDuration(s.file);
+  }
+  lrcTracks.push({
+   title: s.title || s.file.name.replace(/\.[^/.]+$/, ''),
+   artist: s.artist || '',
+   album: s.album || '',
+   duration: duration,
+   file: s.file,
+   status: 'Ready',
+   syncedLyrics: null
+  });
+ }
+ $('lrcLog').textContent=`Synced ${lrcTracks.length} tracks from Song Manager. Click "Find LRC for all loaded songs" to begin[cite: 4].`;
+ lrcRender();
+}
+
+function lrcUpdateStats(){
+ let f=lrcTracks.filter(t=>t.syncedLyrics).length;
+ $('lrcStatTotal').textContent=`${lrcTracks.length} MP3 tracks loaded`;
+ $('lrcStatFound').textContent=`${f} lyrics found`;
+ $('lrcStatMissing').textContent=`${lrcTracks.filter(t=>t.status==="Not found"||t.status==="No synced LRC"||t.status==="Missing title/artist").length} not found`;
+ $('lrcLookupBtn').disabled=!lrcTracks.length;
+ $('lrcSaveAllFolderBtn').disabled=!f;
+ $('lrcZipBtn').disabled=!f;
+}
+
+function lrcRender(){
+ const body=$('lrcRows');
+ body.innerHTML="";
+ if(!lrcTracks.length){
+  body.innerHTML='<tr><td colspan="6" class="text-center py-12 text-slate-400 text-sm">No MP3 files loaded. Choose a folder in the Song Manager tab first.</td></tr>';
+  lrcUpdateStats();
+  return;
+ }
+ lrcTracks.forEach((t,i)=>{
+  let tr=document.createElement("tr");
+  tr.className="hover:bg-slate-50/80 transition-colors";
+  
+  const td=(html, align="left")=>{
+   let e=document.createElement("td");
+   e.className=`p-3.5 text-${align}`;
+   e.innerHTML=html;
+   tr.appendChild(e);
+  };
+
+  td(`<div class="font-semibold text-slate-800 truncate max-w-xs" title="${escapeHtml(t.title||t.file.name)}">${escapeHtml(t.title||t.file.name)}</div><div class="text-[11px] text-slate-400 truncate max-w-xs">${escapeHtml(t.file.name)}</div>`);
+  td(`<span class="text-slate-700">${escapeHtml(t.artist||"—")}</span>`);
+  td(`<span class="text-slate-500">${escapeHtml(t.album||"—")}</span>`);
+  td(`<span class="font-mono-code text-xs text-slate-500">${durationText(t.duration)}</span>`);
+
+  let cls=t.status==="Found"?"text-emerald-700 font-semibold":t.status==="Not found"||t.status==="No synced LRC"?"text-amber-700 font-medium":t.status==="Error"?"text-rose-700 font-medium":"text-slate-400";
+  td(`<span class="text-xs ${cls}">${escapeHtml(t.status||"Ready")}</span>`);
+
+  let actions=document.createElement("td");
+  actions.className="p-3.5 text-right whitespace-nowrap";
+  if(t.syncedLyrics){
+   let b=document.createElement("button");
+   b.className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition mr-1.5";
+   b.textContent="Preview";
+   b.onclick=()=>lrcPreview(i);
+   actions.appendChild(b);
+
+   let d=document.createElement("button");
+   d.className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition";
+   d.textContent="Save LRC";
+   d.onclick=()=>lrcSaveOneToFolder(t);
+   actions.appendChild(d);
+  } else {
+   let b=document.createElement("button");
+   b.className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-semibold rounded-lg transition";
+   b.disabled=!t.title||!t.artist;
+   b.textContent="Find";
+   b.onclick=()=>lrcLookupOne(i);
+   actions.appendChild(b);
+  }
+  tr.appendChild(actions);
+  body.appendChild(tr);
+ });
+ lrcUpdateStats();
+}
+
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
+async function lrcLookupOne(i){
+ let t=lrcTracks[i];
+ if(!t.title||!t.artist){t.status="Missing title/artist";lrcRender();return;}
+ t.status="Searching…";lrcRender();
+ try{
+  const p=new URLSearchParams({track_name:t.title,artist_name:t.artist});
+  if(t.album)p.set("album_name",t.album);
+  const res=await fetch("https://lrclib.net/api/search?"+p.toString(),{headers:{"Lrclib-Client":"Music-Bingo-LRC-Manager/1.0"}});
+  if(res.status===429){let wait=res.headers.get("Retry-After")||"30";throw new Error(`Rate limited. Try again in ${wait}s.`)}
+  if(!res.ok)throw new Error(`LRCLIB HTTP ${res.status}`);
+  const results=await res.json();
+  const candidates=results.filter(x=>x.syncedLyrics&&!x.instrumental);
+  if(!candidates.length){
+   t.status=results.length?"No synced LRC":"Not found";
+   t.syncedLyrics=null;
+  } else {
+   candidates.sort((a,b)=>{
+    let da=t.duration==null?999:Math.abs((a.duration||0)-t.duration);
+    let db=t.duration==null?999:Math.abs((b.duration||0)-t.duration);
+    return da-db;
+   });
+   const best=candidates[0];
+   t.syncedLyrics=best.syncedLyrics;
+   t.status="Found";
+  }
+ }catch(e){
+  t.status="Error";
+  t.error=e.message;
+ }
+ lrcRender();
+}
+
+$('lrcLookupBtn').onclick=async()=>{
+ $('lrcLookupBtn').disabled=true;
+ let pending=lrcTracks.map((t,i)=>({t,i})).filter(x=>!x.t.syncedLyrics);
+ for(let n=0;n<pending.length;n++){
+  let {i}=pending[n];
+  $('lrcLog').textContent=`Searching ${n+1} of ${pending.length}: ${lrcTracks[i].title} — ${lrcTracks[i].artist}[cite: 4]`;
+  await lrcLookupOne(i);
+  $('lrcProgressBar').style.width=`${Math.round((n+1)/pending.length*100)}%`;
+  if(n<pending.length-1)await new Promise(r=>setTimeout(r,350));
+ }
+ $('lrcLog').textContent=`Search complete. Review matches, preview lyrics, and save[cite: 4].`;
+ $('lrcLookupBtn').disabled=false;
+ lrcUpdateStats();
+};
+
+function lrcFilename(t){return lrcSafeName(t.file.name.replace(/\.[^/.]+$/, ''))+".lrc"}
+
+async function getTargetDirectoryHandle(){
+ if(window.showDirectoryPicker){
+  try{
+   // If user already picked a directory before, prompt to pick or reuse
+   const dirHandle = await window.showDirectoryPicker({mode: 'readwrite'});
+   return dirHandle;
+  }catch(e){
+   console.warn("Directory picker cancelled or unsupported:", e);
+   return null;
+  }
+ }
+ return null;
+}
+
+async function lrcSaveOneToFolder(t){
+ const dirHandle = await getTargetDirectoryHandle();
+ if(!dirHandle){
+  // Fallback download if user cancels directory picker
+  const blob = new Blob([t.syncedLyrics], {type:"text/plain;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = lrcFilename(t);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1500);
+  return;
+ }
+
+ try{
+  const filename = lrcFilename(t);
+  const fileHandle = await dirHandle.getFileHandle(filename, {create: true});
+  const writable = await fileHandle.createWritable();
+  await writable.write(t.syncedLyrics);
+  await writable.close();
+  $('lrcLog').textContent = `Successfully saved ${filename} to song folder!`;
+  alert(`Saved ${filename} directly to your song folder!`);
+ }catch(err){
+  console.error("Error writing file:", err);
+  alert("Failed to write file to folder: " + err.message);
+ }
+}
+
+$('lrcSaveAllFolderBtn').onclick=async()=>{
+ const found = lrcTracks.filter(t=>t.syncedLyrics);
+ if(!found.length){alert('No found lyrics to save.');return;}
+
+ const dirHandle = await getTargetDirectoryHandle();
+ if(!dirHandle) return;
+
+ $('lrcSaveAllFolderBtn').disabled = true;
+ let savedCount = 0;
+
+ for(let i=0; i<found.length; i++){
+  const t = found[i];
+  try{
+   const filename = lrcFilename(t);
+   const fileHandle = await dirHandle.getFileHandle(filename, {create: true});
+   const writable = await fileHandle.createWritable();
+   await writable.write(t.syncedLyrics);
+   await writable.close();
+   savedCount++;
+   $('lrcLog').textContent = `Saved (${savedCount}/${found.length}): ${filename}`;
+   $('lrcProgressBar').style.width = `${Math.round((savedCount/found.length)*100)}%`;
+  }catch(err){
+   console.error(`Failed saving ${lrcFilename(t)}:`, err);
+  }
+ }
+
+ $('lrcLog').textContent = `Successfully saved ${savedCount} .lrc files directly to your song folder!`;
+ alert(`Successfully saved ${savedCount} .lrc files into your folder!`);
+ $('lrcSaveAllFolderBtn').disabled = false;
+};
+
+// Fallback ZIP download button
+$('lrcZipBtn').onclick=async()=>{
+ let zip=new JSZip(),found=lrcTracks.filter(t=>t.syncedLyrics);
+ found.forEach(t=>zip.file(lrcFilename(t),t.syncedLyrics));
+ let blob=await zip.generateAsync({type:"blob"});
+ let a=document.createElement("a"),u=URL.createObjectURL(blob);
+ a.href=u;a.download="Music_Bingo_LRC_Lyrics.zip";
+ document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(u),1500);
+};
+
+function lrcPreview(i){
+ $('lrcModalTitle').textContent=`${lrcTracks[i].title} — ${lrcTracks[i].artist}`;
+ $('lrcModalLyrics').textContent=lrcTracks[i].syncedLyrics;
+ $('lrcPreviewModal').classList.remove('hidden');
+}
+function closeLrcModal(){$('lrcPreviewModal').classList.add('hidden');}
 
 // Bingo Card Generation
 function generateCards(){
@@ -1884,95 +2233,83 @@ function lsBindEvents() {
   });
 }
 
-// Standalone Card URL Loader (Fixes QR code parameter reading)
-window.addEventListener('DOMContentLoaded', () => {
-  const params = new URLSearchParams(window.location.search);
-  const cardParam = params.get('card') || params.get('cardData');
-  
-  if (cardParam) {
-    try {
-      let jsonString;
-      try {
-        jsonString = decodeURIComponent(escape(atob(cardParam)));
-      } catch (_) {
-        jsonString = decodeURIComponent(cardParam);
-      }
-      const cardData = JSON.parse(jsonString);
-
-      $('mainHeader').style.display = 'none';
-      $('appTabs').style.display = 'none';
-      document.querySelectorAll('.view-section').forEach(v => v.classList.add('hidden'));
-      document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
-      
-      const pView = $('playerCardView');
-      pView.classList.remove('hidden');
-      pView.classList.add('active');
-
-      const container = $('singleCardContainer');
-      container.innerHTML = '';
-
-      const cardWrapper = document.createElement('div');
-      cardWrapper.className = 'bg-white rounded-2xl p-4 sm:p-6 border border-slate-200 shadow-sm space-y-4';
-
-      const header = document.createElement('div');
-      header.className = 'flex justify-between items-center border-b border-slate-100 pb-3';
-      header.innerHTML = `
-        <div>
-          <h1 class="font-heading text-2xl sm:text-3xl font-bold tracking-wider text-slate-800">${cardData.title || cardData.t || 'MUSIC BINGO'}</h1>
-          <p class="text-xs text-slate-400 mt-0.5">Tap squares as songs are called to mark your card!</p>
-        </div>
-        <span class="text-xs font-bold bg-blue-100 text-blue-800 px-3 py-1 rounded-full whitespace-nowrap">Card #${cardData.id || cardData.n || 1}</span>
-      `;
-
-      const grid = document.createElement('div');
-      const size = cardData.size || cardData.g || 5;
-      grid.className = `grid gap-1.5 sm:gap-2 grid-cols-${size}`;
-      grid.style.gridTemplateColumns = `repeat(${size}, minmax(0, 1fr))`;
-
-      const songsList = cardData.songs || cardData.c || [];
-      const totalCells = size * size;
-      const centerIndex = (cardData.useFree !== false && size % 2 !== 0) ? Math.floor(totalCells / 2) : -1;
-      let songIdx = 0;
-
-      for (let i = 0; i < totalCells; i++) {
-        const isFree = i === centerIndex;
-        const text = isFree ? '★ FREE SPACE ★' : (songsList[songIdx++] || '★');
-        const cellEl = document.createElement('div');
-        cellEl.className = `p-1.5 sm:p-3 min-h-[60px] sm:min-h-[75px] flex items-center justify-center text-center text-[9px] sm:text-xs font-semibold rounded-lg sm:rounded-xl border transition-all cursor-pointer select-none leading-tight overflow-hidden ${
-          isFree 
-            ? 'bg-amber-100 border-amber-300 text-amber-900 font-bold' 
-            : 'bg-white hover:bg-amber-50 hover:border-amber-300 border-slate-200 text-slate-700 shadow-2xs'
-        }`;
-        cellEl.textContent = text;
-
-        if (!isFree) {
-          cellEl.onclick = () => {
-            cellEl.classList.toggle('bg-amber-500');
-            cellEl.classList.toggle('text-white');
-            cellEl.classList.toggle('border-amber-600');
-            cellEl.classList.toggle('font-bold');
-            cellEl.classList.toggle('shadow-sm');
-            cellEl.classList.toggle('bg-white');
-            cellEl.classList.toggle('hover:bg-amber-50');
-          };
-        }
-        grid.appendChild(cellEl);
-      }
-
-      cardWrapper.append(header, grid);
-      container.appendChild(cardWrapper);
-      return;
-    } catch (e) {
-      console.error("Failed to parse standalone card URL:", e);
-    }
+// Check Standalone Card URL on load
+window.addEventListener('load',()=>{
+ const params=new URLSearchParams(window.location.search);
+ if(params.has('card')){
+  try{
+   const encodedData = params.get('card');
+   const jsonString = decodeURIComponent(escape(atob(encodedData)));
+   const cardData=JSON.parse(jsonString);
+   
+   $('mainHeader').style.display='none';
+   $('appTabs').style.display='none';
+   document.querySelectorAll('.view-section').forEach(v=>v.classList.add('hidden'));
+   document.querySelectorAll('.view-section').forEach(v=>v.classList.remove('active'));
+   $('playerCardView').classList.remove('hidden');
+   $('playerCardView').classList.add('active');
+   
+   const container = $('singleCardContainer');
+   container.innerHTML = '';
+   
+   const cardWrapper = document.createElement('div');
+   cardWrapper.className = 'bg-white rounded-2xl p-4 sm:p-6 border border-slate-200 shadow-sm space-y-4';
+   
+   const header = document.createElement('div');
+   header.className = 'flex justify-between items-center border-b border-slate-100 pb-3';
+   header.innerHTML = `
+     <div>
+       <h1 class="font-heading text-2xl sm:text-3xl font-bold tracking-wider text-slate-800">${cardData.title}</h1>
+       <p class="text-xs text-slate-400 mt-0.5">Tap squares as songs are called to mark your card!</p>
+     </div>
+     <span class="text-xs font-bold bg-blue-100 text-blue-800 px-3 py-1 rounded-full whitespace-nowrap">Card #${cardData.id}</span>
+   `;
+   
+   const grid = document.createElement('div');
+   grid.className = `grid gap-1.5 sm:gap-2 grid-cols-${cardData.size}`;
+   grid.style.gridTemplateColumns = `repeat(${cardData.size}, minmax(0, 1fr))`;
+   
+   const centerIndex = cardData.useFree ? Math.floor((cardData.size * cardData.size) / 2) : -1;
+   let songIdx = 0;
+   
+   for(let i=0; i<cardData.size * cardData.size; i++){
+     const isFree = i === centerIndex;
+     const text = isFree ? '★ FREE SPACE ★' : cardData.songs[songIdx++];
+     const cellEl = document.createElement('div');
+     cellEl.className = `p-1.5 sm:p-3 min-h-[60px] sm:min-h-[75px] flex items-center justify-center text-center text-[9px] sm:text-xs font-semibold rounded-lg sm:rounded-xl border transition-all cursor-pointer select-none leading-tight overflow-hidden ${
+       isFree 
+         ? 'bg-amber-100 border-amber-300 text-amber-900 font-bold' 
+         : 'bg-white hover:bg-amber-50 hover:border-amber-300 border-slate-200 text-slate-700 shadow-2xs'
+     }`;
+     cellEl.textContent = text;
+     
+     if(!isFree){
+       cellEl.onclick = () => {
+         cellEl.classList.toggle('bg-amber-500');
+         cellEl.classList.toggle('text-white');
+         cellEl.classList.toggle('border-amber-600');
+         cellEl.classList.toggle('font-bold');
+         cellEl.classList.toggle('shadow-sm');
+         cellEl.classList.toggle('bg-white');
+         cellEl.classList.toggle('hover:bg-amber-50');
+       };
+     }
+     grid.appendChild(cellEl);
+   }
+   
+   cardWrapper.append(header, grid);
+   container.appendChild(cardWrapper);
+  }catch(e){
+   console.error("Invalid card URL:", e);
+   alert("The card link appears to be corrupted or invalid.");
   }
-
-  // Initialize App Normally
-  lsBindEvents();
-  lsActivateDemoTrack();
-  lsRenderVisualizerLoop();
-  render();
+ }
 });
+
+// Initialize App
+lsBindEvents();
+lsActivateDemoTrack();
+lsRenderVisualizerLoop();
 
 $('moveCurrent').onclick=()=>{if(currentId)moveSelected(currentId)};
 $('shuffleBtn').onclick=shuffleAndPlay;
@@ -1980,11 +2317,12 @@ $('search').oninput=render;
 $('clearSearch').onclick=()=>{$('search').value='';render()};
 $('returnAll').onclick=()=>{available.push(...selected);selected=[];render();updateCardHighlights();};
 $('export').onclick=()=>{
- const text=selected.map((x,i)=>`${i + 1}. ${displayTitleOf(x)}`).join('\n');
+ const text=selected.map((x,i)=>`${i+1}. ${displayTitleOf(x)}`).join('\n');
  if(!text){alert('No selected songs to export.');return;}
  const blob=new Blob([text],{type:'text/plain'}),url=URL.createObjectURL(blob),a=document.createElement('a');
  a.href=url;a.download='selected-songs.txt';a.click();URL.revokeObjectURL(url);
 };
+render();
 </script>
 </body>
 </html>
