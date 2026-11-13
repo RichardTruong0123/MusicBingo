@@ -1,0 +1,1906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>♫ Music Bingo — Manager, Card Generator & LyricSync</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- jsmediatags CDN for reading ID3 metadata from MP3 files -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+<!-- QRCode.js CDN for client-side QR code generation -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Oswald:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: #f3f5f8;
+    color: #172033;
+  }
+  .font-heading {
+    font-family: 'Oswald', 'Inter', sans-serif;
+  }
+  .font-mono-code {
+    font-family: 'JetBrains Mono', monospace;
+  }
+  
+  /* Custom scrollbar for song lists & lyrics */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+
+  /* LyricSync Smooth Line Transitions */
+  .lyric-line {
+    transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    transform-origin: left center;
+  }
+  .lyric-line.active {
+    transform: scale(1.015);
+  }
+  .lyric-line.past {
+    opacity: 0.5;
+  }
+  .lyric-line.future {
+    opacity: 0.75;
+  }
+  .lyric-line:hover {
+    opacity: 1;
+  }
+
+  /* Custom Range Input Styling for LyricSync */
+  input[type="range"].ls-range {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+  }
+  input[type="range"].ls-range::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 9999px;
+  }
+  input[type="range"].ls-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 14px;
+    width: 14px;
+    border-radius: 50%;
+    background: #2563eb;
+    border: 2px solid #ffffff;
+    margin-top: -4px;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+    transition: transform 0.15s ease;
+  }
+  input[type="range"].ls-range:hover::-webkit-slider-thumb {
+    transform: scale(1.2);
+  }
+
+  /* Printable Styles */
+  @media print {
+    body {
+      background-color: #ffffff !important;
+      color: #000000 !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+    .no-print {
+      display: none !important;
+    }
+    .print-only {
+      display: block !important;
+    }
+    .bingo-card-page {
+      page-break-after: always;
+      break-after: page;
+      padding: 1rem;
+      margin: 0 auto;
+      max-width: 100% !important;
+      box-shadow: none !important;
+      border: 3px solid #000 !important;
+    }
+    .bingo-grid {
+      gap: 0 !important;
+      border: 2px solid #000 !important;
+    }
+    .bingo-cell {
+      border: 1px solid #000 !important;
+      background: #fff !important;
+      color: #000 !important;
+      font-size: 11pt !important;
+    }
+    .bingo-cell-free {
+      background: #f0f0f0 !important;
+      font-weight: bold !important;
+    }
+  }
+</style>
+</head>
+<body class="p-3 md:p-8">
+
+<!-- Toast Notification Container (No Print) -->
+<div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none no-print"></div>
+
+<!-- Drag & Drop Overlay for LyricSync (No Print) -->
+<div id="ls-drop-overlay" class="fixed inset-0 z-40 bg-slate-900/75 backdrop-blur-sm border-4 border-dashed border-blue-500 m-4 rounded-3xl hidden flex-col items-center justify-center pointer-events-none transition-opacity no-print">
+  <div class="w-16 h-16 rounded-2xl bg-blue-600/20 flex items-center justify-center mb-3 text-blue-300 animate-bounce">
+    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+    </svg>
+  </div>
+  <h2 class="text-xl font-bold text-white mb-1">Drop Audio, Lyrics, or Music Folder</h2>
+  <p class="text-slate-200 text-sm">Automatically pairs <span class="text-blue-300 font-mono-code">song.mp3</span> with <span class="text-emerald-300 font-mono-code">song.lrc</span></p>
+</div>
+
+<div class="max-w-7xl mx-auto space-y-6">
+
+  <!-- ==================== HEADER (No Print) ==================== -->
+  <header id="mainHeader" class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 no-print">
+    <div>
+      <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+        <span>♫ Music Bingo</span>
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">Load your MP3 library, run the game session, generate printable bingo cards, and sync karaoke lyrics[cite: 3].</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs font-bold uppercase tracking-wider">
+        Manager, Cards & LyricSync
+      </span>
+    </div>
+  </header>
+
+  <!-- ==================== TAB NAVIGATION (No Print) ==================== -->
+  <div id="appTabs" class="flex border-b border-slate-200 no-print overflow-x-auto">
+    <button id="tabManagerBtn" onclick="switchTab('managerView')" class="py-3 px-6 font-semibold text-sm border-b-2 border-blue-600 text-blue-600 flex items-center gap-2 transition-colors whitespace-nowrap">
+      <span>🎵 Song Manager & Player</span>
+    </button>
+    <button id="tabCardsBtn" onclick="switchTab('cardGenView')" class="py-3 px-6 font-semibold text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition-colors whitespace-nowrap">
+      <span>🎲 Bingo Cards Generator</span>
+      <span id="cardBadge" class="bg-slate-200 text-slate-700 rounded-full px-2 py-0.5 text-xs font-bold">0 Songs</span>
+    </button>
+    <button id="tabLyricSyncBtn" onclick="switchTab('lyricSyncView')" class="py-3 px-6 font-semibold text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition-colors whitespace-nowrap">
+      <span>🎤 LyricSync Studio</span>
+      <span class="bg-indigo-100 text-indigo-700 rounded-full px-2 py-0.5 text-[11px] font-bold">Library Synced</span>
+    </button>
+  </div>
+
+  <!-- ==================== TAB 1: SONG MANAGER ==================== -->
+  <div id="managerView" class="view-section space-y-6 no-print">
+    
+    <!-- TOOLBAR -->
+    <section class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex flex-wrap items-center gap-3">
+      <label for="folder" class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl transition-all shadow-sm flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+        <span>Choose MP3 Folder</span>
+      </label>
+      <input id="folder" type="file" accept="audio/mpeg, .mp3" webkitdirectory directory multiple class="hidden">
+
+      <div class="relative flex-1 min-w-[220px]">
+        <input id="search" type="search" placeholder="Search available songs..." class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+      </div>
+
+      <button id="clearSearch" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm px-3.5 py-2 rounded-xl transition-all">Clear Search</button>
+
+      <button id="shuffleBtn" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold text-sm px-4 py-2 rounded-xl shadow-sm transition-all flex items-center gap-2">
+        <span>🔀 Shuffle & Play</span>
+      </button>
+
+      <span id="folderStatus" class="text-xs text-slate-500 font-medium ml-auto">No folder loaded</span>
+    </section>
+
+    <!-- PLAYER BOARD -->
+    <section class="bg-white rounded-2xl p-4 md:p-6 shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-center">
+      <div>
+        <div class="text-xs font-bold text-slate-400 tracking-wider uppercase mb-1">Now Playing</div>
+        <div id="nowPlaying" class="text-lg font-bold text-slate-800 truncate">Choose a song from Available Songs</div>
+        <audio id="audio" controls class="w-full mt-3 h-10 rounded-lg" preload="metadata"></audio>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button id="sendToLyricSyncBtn" onclick="sendCurrentSongToLyricSync()" disabled class="w-full md:w-auto bg-indigo-50 disabled:opacity-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-semibold text-sm px-4 py-3 rounded-xl transition-all flex items-center justify-center gap-1.5">
+          <span>🎤 Open in LyricSync</span>
+        </button>
+        <button id="moveCurrent" disabled class="w-full md:w-auto bg-emerald-600 disabled:opacity-50 hover:bg-emerald-700 text-white font-semibold text-sm px-5 py-3 rounded-xl transition-all shadow-sm flex items-center justify-center gap-2">
+          <span>Move to Selected →</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- DUAL PANELS: AVAILABLE VS SELECTED -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      
+      <!-- AVAILABLE SONGS -->
+      <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[500px]">
+        <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+          <div class="flex items-center gap-2">
+            <h2 class="font-bold text-slate-800">Available Songs</h2>
+            <span id="availableCount" class="bg-slate-200 text-slate-700 text-xs font-semibold px-2.5 py-0.5 rounded-full">0 songs</span>
+          </div>
+        </div>
+        <div id="availableList" class="p-3 overflow-y-auto custom-scrollbar flex-1 space-y-1">
+          <div class="text-center py-16 text-slate-400 text-sm">Choose a folder containing MP3 files to get started.</div>
+        </div>
+      </section>
+
+      <!-- SELECTED / PLAYED SONGS -->
+      <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[500px]">
+        <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+          <div class="flex items-center gap-2">
+            <h2 class="font-bold text-slate-800">Selected / Played Songs</h2>
+            <span id="selectedCount" class="bg-slate-200 text-slate-700 text-xs font-semibold px-2.5 py-0.5 rounded-full">0 songs</span>
+          </div>
+          <button id="returnAll" class="text-xs text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1 rounded-lg font-medium transition-colors">
+            Return All
+          </button>
+        </div>
+        <div id="selectedList" class="p-3 overflow-y-auto custom-scrollbar flex-1 space-y-1">
+          <div class="text-center py-16 text-slate-400 text-sm">Songs played or moved will appear here.</div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- FOOTER ACTIONS -->
+    <div class="flex flex-wrap justify-between items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+      <p class="text-xs text-slate-500">Selected songs are tracked for the current session. Export to save your played tracklist.</p>
+      <div class="flex gap-2">
+        <button id="export" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm px-4 py-2 rounded-xl transition-all">
+          📄 Export Selected List (.txt)
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==================== TAB 2: BINGO CARDS GENERATOR ==================== -->
+  <div id="cardGenView" class="view-section hidden space-y-6 no-print">
+    
+    <!-- CARD BUILDER CONTROLS -->
+    <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-6">
+      <div class="border-b border-slate-100 pb-4">
+        <h2 class="text-xl font-bold text-slate-800">Card Setup & Generator</h2>
+        <p class="text-sm text-slate-500 mt-0.5">Customize your grid layout and generate printable Music Bingo cards from your loaded song library.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        
+        <!-- Header Text -->
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1" for="cardTitle">Bingo Header Title</label>
+          <input id="cardTitle" type="text" value="MUSIC BINGO" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-bold uppercase tracking-wide">
+        </div>
+
+        <!-- Grid Size -->
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1" for="gridSize">Grid Size</label>
+          <select id="gridSize" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white">
+            <option value="3">3 x 3 (9 Songs)</option>
+            <option value="4">4 x 4 (16 Songs)</option>
+            <option value="5" selected>5 x 5 Standard (25 Songs)</option>
+          </select>
+        </div>
+
+        <!-- Center Free Space -->
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1" for="freeSpace">Center Free Space</label>
+          <select id="freeSpace" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white">
+            <option value="yes">Yes (5x5 & 3x3 only)</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+
+        <!-- Number of Cards -->
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1" for="cardCount">Quantity of Cards</label>
+          <input id="cardCount" type="number" min="1" max="50" value="5" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+        </div>
+
+        <!-- Song Pool Source -->
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1" for="songSource">Song Pool Source</label>
+          <select id="songSource" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white">
+            <option value="all">All Loaded Songs</option>
+            <option value="selected">Selected Songs Only</option>
+          </select>
+        </div>
+
+      </div>
+
+      <div class="flex flex-wrap items-center justify-end gap-3 pt-2 border-t border-slate-100">
+        <button onclick="generateCards()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm px-6 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-2">
+          <span>✨ Generate Cards</span>
+        </button>
+        <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold text-sm px-6 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-2">
+          <span>🖨️ Print Cards</span>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- CARDS DISPLAY CONTAINER -->
+    <div id="cardsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div class="col-span-full bg-white rounded-2xl p-12 text-center text-slate-400 border border-slate-200">
+        <div class="text-4xl mb-2">🎲</div>
+        <p class="text-sm">Click <strong>"Generate Cards"</strong> above to produce printable bingo sheets.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==================== TAB 3: LYRICSYNC STUDIO ==================== -->
+  <div id="lyricSyncView" class="view-section hidden space-y-6 no-print">
+
+    <!-- LYRICSYNC TOOLBAR -->
+    <section class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-sm">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+          </svg>
+        </div>
+        <div>
+          <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+            LyricSync Studio
+            <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Manager Library Synced</span>
+          </h2>
+          <p class="text-xs text-slate-500">Pick any song from your loaded Manager library or drop a matching .LRC file.</p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- Load Demo Button -->
+        <button id="ls-btn-load-demo" class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex items-center gap-1.5" title="Reload Built-in Synthesized Demo Track">
+          <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+          </svg>
+          <span>Synth Demo</span>
+        </button>
+
+        <!-- Load Standalone Lyrics Button -->
+        <label class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition cursor-pointer flex items-center gap-1.5" title="Manually load a .lrc or .txt lyrics file">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+          </svg>
+          <span>Load .LRC</span>
+          <input type="file" id="ls-input-lyrics" accept=".lrc,.txt,text/plain" class="hidden">
+        </label>
+      </div>
+    </section>
+
+    <!-- MAIN LYRICSYNC WORKSPACE -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+
+      <!-- Left Column: Track Info, Visualizer & Library Track Selector (5 cols on lg) -->
+      <section class="lg:col-span-5 flex flex-col gap-5">
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm flex flex-col justify-between relative overflow-hidden">
+          <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600"></div>
+
+          <!-- Track Metadata -->
+          <div class="flex items-start justify-between gap-4 mb-4">
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2 mb-1.5">
+                <span id="ls-track-badge" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Built-in Synth Demo
+                </span>
+                <span id="ls-lrc-match-badge" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800" title="Accompanying LRC Lyric Status">
+                  <svg class="w-3.5 h-3.5 text-indigo-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <span id="ls-lrc-match-text" class="truncate max-w-[180px]">Demo .LRC Synced</span>
+                </span>
+              </div>
+              <h3 id="ls-track-title" class="text-xl font-bold text-slate-900 truncate" title="Neon Horizon (Synthwave Demo)">Neon Horizon (Synthwave Demo)</h3>
+              <p id="ls-track-artist" class="text-xs text-slate-500 truncate mt-0.5">Manager Audio Player • Live Sync Active</p>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 text-blue-600">
+              <svg id="ls-disc-icon" class="w-6 h-6 transition-transform duration-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Real-Time Web Audio Visualizer Canvas -->
+          <div class="relative w-full h-36 bg-slate-50 rounded-xl border border-slate-200 overflow-hidden mb-4 flex items-center justify-center">
+            <canvas id="ls-visualizer-canvas" class="w-full h-full block"></canvas>
+            <div id="ls-visualizer-idle-label" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-slate-400 text-xs gap-1">
+              <span class="font-medium text-slate-500">Play audio in Song Manager to start Visualizer</span>
+            </div>
+          </div>
+
+          <!-- Seekable Progress Bar & Timestamps -->
+          <div class="mb-4">
+            <div class="relative w-full flex items-center group">
+              <input type="range" id="ls-seek-slider" min="0" max="100" step="0.05" value="0" class="ls-range w-full z-10">
+              <div class="absolute left-0 right-0 h-1.5 bg-slate-200 rounded-full overflow-hidden pointer-events-none">
+                <div id="ls-seek-fill" class="h-full bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 w-0 transition-all duration-75"></div>
+              </div>
+            </div>
+            <div class="flex justify-between items-center text-xs font-mono-code text-slate-500 mt-1.5">
+              <span id="ls-time-elapsed">00:00.0</span>
+              <span id="ls-time-remaining">-00:00.0</span>
+            </div>
+          </div>
+
+          <!-- Main Playback Transport Controls -->
+          <div class="flex items-center justify-between gap-2">
+            <!-- Playback Speed Toggle -->
+            <button id="ls-btn-speed" class="px-2.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-mono-code font-semibold text-slate-700 border border-slate-200 transition min-w-[54px]" title="Cycle Playback Speed">
+              1.0x
+            </button>
+
+            <!-- Rewind 5s / Play-Pause / Forward 5s -->
+            <div class="flex items-center gap-3">
+              <button id="ls-btn-rew" class="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition" title="Rewind 5 seconds">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.333 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z"></path>
+                </svg>
+              </button>
+
+              <button id="ls-btn-play-pause" class="w-12 h-12 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm flex items-center justify-center transition transform active:scale-95" title="Play / Pause (Spacebar)">
+                <svg id="ls-icon-play" class="w-6 h-6 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z"></path>
+                </svg>
+                <svg id="ls-icon-pause" class="w-6 h-6 hidden" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"></path>
+                </svg>
+              </button>
+
+              <button id="ls-btn-fwd" class="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition" title="Forward 5 seconds">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.933 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.333-4z"></path>
+                </svg>
+              </button>
+            </div>
+
+            <!-- Volume Control -->
+            <div class="flex items-center gap-2">
+              <button id="ls-btn-mute" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition" title="Mute / Unmute">
+                <svg id="ls-icon-vol-high" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path>
+                </svg>
+                <svg id="ls-icon-vol-mute" class="w-4 h-4 hidden text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"></path>
+                </svg>
+              </button>
+              <div class="relative w-16 sm:w-20 flex items-center">
+                <input type="range" id="ls-volume-slider" min="0" max="1" step="0.02" value="0.85" class="ls-range w-full z-10">
+                <div class="absolute left-0 right-0 h-1.5 bg-slate-200 rounded-full overflow-hidden pointer-events-none">
+                  <div id="ls-volume-fill" class="h-full bg-blue-600 w-[85%]"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Manager Library Quick Selector Drawer -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-2.5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+              </svg>
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-700">Manager Library Songs</span>
+            </div>
+            <span id="ls-library-count" class="text-[11px] font-mono-code font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">0 tracks</span>
+          </div>
+          <div id="ls-library-items" class="max-h-48 overflow-y-auto custom-scrollbar divide-y divide-slate-100 pr-1">
+            <div class="text-center py-6 text-slate-400 text-xs">No MP3 folder loaded in Song Manager yet.</div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Right Column: Karaoke Display & Lyric Syncer Studio (7 cols on lg) -->
+      <section class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col overflow-hidden min-h-[540px] max-h-[75vh]">
+        
+        <!-- Panel Header with Mode Tabs -->
+        <div class="px-5 py-3.5 border-b border-slate-100 bg-slate-50/70 flex flex-wrap items-center justify-between gap-3">
+          <div class="inline-flex p-1 rounded-xl bg-slate-200/70">
+            <button id="ls-tab-karaoke" class="px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold bg-blue-600 text-white shadow-sm transition flex items-center gap-1.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+              </svg>
+              <span>Karaoke View</span>
+            </button>
+            <button id="ls-tab-syncer" class="px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 transition flex items-center gap-1.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              <span>Lyric Syncer Editor</span>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button id="ls-btn-autoscroll" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition flex items-center gap-1.5" title="Toggle Auto-Scroll">
+              <span id="ls-autoscroll-dot" class="w-2 h-2 rounded-full bg-blue-600"></span>
+              <span>Auto-Scroll: ON</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- VIEW 1: KARAOKE DISPLAY -->
+        <div id="ls-view-karaoke" class="flex-1 flex flex-col overflow-hidden relative">
+          <div id="ls-lyrics-container" class="flex-1 overflow-y-auto custom-scrollbar px-6 sm:px-8 py-10 space-y-3 scroll-smooth"></div>
+          <div class="h-6 bg-gradient-to-t from-white to-transparent pointer-events-none absolute bottom-0 left-0 right-0"></div>
+        </div>
+
+        <!-- VIEW 2: LYRIC SYNCER & EDITOR STUDIO -->
+        <div id="ls-view-syncer" class="flex-1 hidden flex-col overflow-hidden p-5 gap-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+            <div class="flex flex-wrap items-center gap-2">
+              <button id="ls-btn-sync-stamp" class="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs sm:text-sm font-bold shadow-sm flex items-center gap-2 transition active:scale-95">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span>Stamp Current Line (T)</span>
+              </button>
+              <button id="ls-btn-sync-reset" class="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-300 transition">
+                Reset Cursor to Line 1
+              </button>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button id="ls-btn-apply-lyrics" class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition">
+                Apply to Player
+              </button>
+              <button id="ls-btn-export-lrc" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition flex items-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                </svg>
+                <span>Export .LRC</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between text-xs text-slate-500 px-1 gap-2">
+            <span>Paste plain lyrics or edit <code class="text-blue-600 font-mono-code">[mm:ss.xx]</code> tags below. Press <kbd class="px-1.5 py-0.5 bg-slate-100 rounded border border-slate-300 text-slate-700 font-mono-code">T</kbd> or click <strong>Stamp Current Line</strong> while music plays.</span>
+            <span id="ls-sync-cursor-indicator" class="font-mono-code text-purple-700 font-bold">Next Line: #1</span>
+          </div>
+
+          <textarea id="ls-syncer-textarea" spellcheck="false" class="flex-1 w-full bg-slate-50 border border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl p-4 font-mono-code text-xs sm:text-sm text-slate-800 leading-relaxed resize-none outline-none custom-scrollbar" placeholder="Paste your song lyrics here (one line per phrase), press Play, and click 'Stamp Current Line' as each line begins..."></textarea>
+        </div>
+
+      </section>
+    </div>
+
+  </div>
+
+  <!-- ==================== PLAYER DIRECT SINGLE CARD VIEW ==================== -->
+  <div id="playerCardView" class="view-section hidden max-w-xl mx-auto space-y-4 no-print py-4">
+    <div class="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200 shadow-sm space-y-4">
+      <div id="singleCardContainer"></div>
+      <div class="pt-2 text-center border-t border-slate-100">
+        <span class="text-xs text-slate-400">Tap cells to mark/unmark songs as they play!</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== PRINT CONTAINER (PRINT ONLY) ==================== -->
+  <div id="printableArea" class="hidden print-only space-y-6"></div>
+
+  <!-- ==================== QR CODE MODAL ==================== -->
+  <div id="qrModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden no-print" onclick="closeModal()">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 space-y-4 text-center shadow-xl border border-slate-100" onclick="event.stopPropagation()">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+        <h3 class="font-bold text-slate-800">Scan to Play</h3>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+      </div>
+      <p class="text-xs text-slate-500">Scan this QR code with a phone camera to open this card on another device:</p>
+      <div id="qrcode" class="flex justify-center p-3 bg-slate-50 rounded-xl border border-slate-200 min-h-[200px] items-center"></div>
+      <div class="space-y-2 pt-2">
+        <button onclick="closeModal()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm py-2 rounded-xl transition-all">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="text-xs text-slate-400 text-center py-4 no-print">
+    Privacy: folder selection, ID3 parsing, and playback happen locally in your browser.
+  </div>
+
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let available=[], selected=[], currentId=null, nextId=1, currentUrl=null;
+const audio=$('audio');
+
+const titleOfFile=f=>f.name.replace(/\.[^/.]+$/, '');
+const displayTitleOf=item=>item.title?(item.artist?`${item.title} — ${item.artist}`:item.title):titleOfFile(item.file);
+const sizeOf=n=>n<1024*1024?(n/1024).toFixed(0)+' KB':(n/1024/1024).toFixed(1)+' MB';
+
+function switchTab(tabId){
+ document.querySelectorAll('.view-section').forEach(v=>v.classList.add('hidden'));
+ document.querySelectorAll('.view-section').forEach(v=>v.classList.remove('active'));
+ 
+ const managerBtn = $('tabManagerBtn');
+ const cardsBtn = $('tabCardsBtn');
+ const lyricSyncBtn = $('tabLyricSyncBtn');
+ 
+ managerBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition-colors whitespace-nowrap";
+ cardsBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition-colors whitespace-nowrap";
+ lyricSyncBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition-colors whitespace-nowrap";
+ 
+ if(tabId === 'managerView'){
+   managerBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-blue-600 text-blue-600 flex items-center gap-2 transition-colors whitespace-nowrap";
+ } else if(tabId === 'cardGenView'){
+   cardsBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-blue-600 text-blue-600 flex items-center gap-2 transition-colors whitespace-nowrap";
+ } else if(tabId === 'lyricSyncView'){
+   lyricSyncBtn.className = "py-3 px-6 font-semibold text-sm border-b-2 border-blue-600 text-blue-600 flex items-center gap-2 transition-colors whitespace-nowrap";
+   renderManagerLibraryDrawer();
+   requestAnimationFrame(() => {
+     if (typeof lsResizeVisualizerCanvas === 'function') lsResizeVisualizerCanvas();
+   });
+ }
+
+ $(tabId).classList.remove('hidden');
+ $(tabId).classList.add('active');
+}
+
+function render(){
+ const q=$('search').value.trim().toLowerCase();
+ const shown=available.filter(x=>displayTitleOf(x).toLowerCase().includes(q));
+ $('availableCount').textContent=available.length+' songs';
+ $('selectedCount').textContent=selected.length+' songs';
+ const totalLoaded = available.length + selected.length;
+ $('folderStatus').textContent = totalLoaded > 0 ? `${totalLoaded} MP3 file(s) loaded` : 'No folder loaded';
+ $('cardBadge').textContent = `${totalLoaded} Songs`;
+ $('availableList').innerHTML=shown.length?'':'<div class="text-center py-16 text-slate-400 text-sm">'+(available.length?'No matching songs.':'No available songs.')+'</div>';
+ shown.forEach((x,i)=>$('availableList').appendChild(songRow(x,'available',i)));
+ $('selectedList').innerHTML=selected.length?'':'<div class="text-center py-16 text-slate-400 text-sm">Songs played or moved will appear here.</div>';
+ selected.forEach((x,i)=>$('selectedList').appendChild(songRow(x,'selected',i)));
+ $('moveCurrent').disabled=!currentId||!available.some(x=>x.id===currentId);
+ $('sendToLyricSyncBtn').disabled=!currentId;
+ if(activeMainTab==='lyricSyncView') renderManagerLibraryDrawer();
+}
+
+function songRow(item,where,index){
+ const row=document.createElement('div');
+ const isActive = item.id === currentId;
+ row.className=`flex items-center justify-between p-2.5 rounded-xl border transition-all ${
+   isActive ? 'bg-blue-50 border-blue-200' : 'bg-white hover:bg-slate-50 border-slate-100'
+ }`;
+ 
+ const title=displayTitleOf(item);
+ const size=sizeOf(item.file.size);
+
+ row.innerHTML = `
+   <div class="flex items-center gap-3 min-w-0 flex-1 pr-2">
+     <span class="w-6 h-6 flex items-center justify-center bg-slate-100 text-slate-500 rounded-lg text-xs font-bold flex-shrink-0">
+       ${index + 1}
+     </span>
+     <div class="min-w-0 flex-1">
+       <div class="text-sm font-semibold text-slate-800 truncate" title="${title}">${title}</div>
+       <div class="text-[11px] text-slate-400">${size}</div>
+     </div>
+   </div>
+   <div class="flex items-center gap-1.5 flex-shrink-0">
+     <button class="play-btn px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-all">▶ Play</button>
+     <button class="move-btn px-3 py-1.5 ${where==='available' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 hover:bg-slate-300 text-slate-700'} text-xs font-semibold rounded-lg transition-all">${where==='available'?'Move →':'← Return'}</button>
+   </div>
+ `;
+
+ row.querySelector('.play-btn').onclick = () => playSong(item);
+ row.querySelector('.move-btn').onclick = () => where==='available'?moveSelected(item.id):returnAvailable(item.id);
+
+ return row;
+}
+
+function playSong(item){
+ currentId=item.id;
+ if(currentUrl)URL.revokeObjectURL(currentUrl);
+ currentUrl=URL.createObjectURL(item.file);
+ audio.src=currentUrl;
+ $('nowPlaying').textContent=displayTitleOf(item);
+ audio.play().catch(err=>console.log(err));
+ 
+ if (typeof lsHandleManagerSongPlay === 'function') {
+   lsHandleManagerSongPlay(item);
+ }
+ render();
+}
+
+function sendCurrentSongToLyricSync(){
+ const item = available.find(x=>x.id===currentId) || selected.find(x=>x.id===currentId);
+ if(!item) return;
+ switchTab('lyricSyncView');
+}
+
+let activeMainTab = 'managerView';
+const origSwitchTab = switchTab;
+window.switchTab = function(tabId) {
+  activeMainTab = tabId;
+  origSwitchTab(tabId);
+};
+
+function updateCardHighlights() {
+  const selectedTitles = new Set(selected.map(s => displayTitleOf(s)));
+  document.querySelectorAll('.bingo-cell-item').forEach(cell => {
+    const songName = cell.getAttribute('data-song');
+    if (selectedTitles.has(songName)) {
+      cell.classList.add('bg-amber-500', 'text-white', 'border-amber-600', 'font-bold', 'shadow-sm');
+      cell.classList.remove('bg-white', 'hover:bg-amber-50', 'text-slate-700');
+    } else {
+      cell.classList.remove('bg-amber-500', 'text-white', 'border-amber-600', 'font-bold', 'shadow-sm');
+      cell.classList.add('bg-white', 'hover:bg-amber-50', 'text-slate-700');
+    }
+  });
+}
+
+function moveSelected(id){
+ const idx=available.findIndex(x=>x.id===id);if(idx<0)return;
+ const [item]=available.splice(idx,1);selected.push(item);
+ render();
+ updateCardHighlights();
+}
+
+function returnAvailable(id){
+ const idx=selected.findIndex(x=>x.id===id);if(idx<0)return;
+ available.push(selected.splice(idx,1)[0]);
+ render();
+ updateCardHighlights();
+}
+
+function shuffleAndPlay(){
+ if(available.length===0){alert('No available songs left!');return;}
+ const item=available[Math.floor(Math.random()*available.length)];
+ playSong(item);
+ moveSelected(item.id);
+}
+
+// ID3 Tag Parsing
+function parseID3Tags(file){
+ return new Promise(resolve=>{
+  if(!window.jsmediatags){resolve({title:null,artist:null});return;}
+  window.jsmediatags.read(file,{
+   onSuccess:tag=>{
+    const title=tag.tags.title?tag.tags.title.trim():null;
+    const artist=tag.tags.artist?tag.tags.artist.trim():null;
+    resolve({title,artist});
+   },
+   onError:()=>resolve({title:null,artist:null})
+  });
+ });
+}
+
+$('folder').addEventListener('change', async e=>{
+ const rawFiles=Array.from(e.target.files);
+ const files=rawFiles.filter(f=>f.name.toLowerCase().endsWith('.mp3')&&!f.name.startsWith('._'));
+ if(files.length===0){alert('No MP3 files found.');return;}
+
+ const lyricFiles = rawFiles.filter(f => /\.(lrc|txt)$/i.test(f.name) && !f.name.startsWith('._'));
+ if (typeof lsState !== 'undefined' && lyricFiles.length > 0) {
+   for (const lf of lyricFiles) {
+     const stem = lf.name.replace(/\.[^/.]+$/, '').trim().toLowerCase();
+     const ext = lf.name.split('.').pop().toLowerCase();
+     lsState.lyricFileRegistry.set(stem, { file: lf, ext });
+   }
+ }
+
+ available=[];selected=[];currentId=null;audio.pause();audio.removeAttribute('src');
+ $('nowPlaying').textContent='Reading ID3 Tags…';
+ 
+ for(const file of files){
+  const tags=await parseID3Tags(file);
+  available.push({id:nextId++,file,name:file.name,title:tags.title,artist:tags.artist});
+ }
+ $('nowPlaying').textContent='Choose a song from Available Songs';
+ render();
+});
+
+// Bingo Card Generation
+function generateCards(){
+ const poolSource=$('songSource').value;
+ const pool=(poolSource==='selected'?selected:available.concat(selected)).map(x=>displayTitleOf(x));
+ const size=parseInt($('gridSize').value);
+ const totalNeeded=size*size;
+ const useFree=$('freeSpace').value==='yes'&&(size===3||size===5);
+
+ if(pool.length<(useFree?totalNeeded-1:totalNeeded)){
+  alert(`You need at least ${useFree?totalNeeded-1:totalNeeded} songs to fill a ${size}x${size} card.`);
+  return;
+ }
+
+ const cardCount=parseInt($('cardCount').value);
+ const container=$('cardsContainer');
+ const printArea=$('printableArea');
+ container.innerHTML='';
+ printArea.innerHTML='';
+
+ for(let c=1;c<=cardCount;c++){
+  const shuffled=[...pool].sort(()=>Math.random()-0.5);
+  const cardData={title:$('cardTitle').value,size,id:c,songs:shuffled.slice(0,useFree?totalNeeded-1:totalNeeded),useFree};
+  container.appendChild(createCardElement(cardData));
+  printArea.appendChild(createPrintCardElement(cardData));
+ }
+ updateCardHighlights();
+}
+
+function createCardElement(data){
+ const card=document.createElement('div');
+ card.className='bg-white rounded-2xl p-4 sm:p-6 border border-slate-200 shadow-sm space-y-4';
+
+ const header=document.createElement('div');
+ header.className='flex justify-between items-center border-b border-slate-100 pb-3';
+ header.innerHTML=`
+   <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+     <h3 class="font-heading text-xl sm:text-2xl font-bold tracking-wider text-slate-800 truncate">${data.title}</h3>
+     <span class="text-[10px] sm:text-xs font-bold bg-slate-100 text-slate-600 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full whitespace-nowrap">Card #${data.id}</span>
+   </div>
+ `;
+ 
+ const grid=document.createElement('div');
+ grid.className=`grid gap-1.5 sm:gap-2 grid-cols-${data.size}`;
+ grid.style.gridTemplateColumns = `repeat(${data.size}, minmax(0, 1fr))`;
+
+ const centerIndex=data.useFree?Math.floor((data.size*data.size)/2):-1;
+ let songIdx=0;
+
+ for(let i=0;i<data.size*data.size;i++){
+  const cell=document.createElement('div');
+  const isFree = i === centerIndex;
+  
+  if(isFree){
+   cell.className='p-1.5 sm:p-3 min-h-[55px] sm:min-h-[70px] flex items-center justify-center text-center text-[9px] sm:text-xs font-semibold rounded-lg sm:rounded-xl border transition-all cursor-pointer select-none leading-tight overflow-hidden bg-amber-100 border-amber-300 text-amber-900 font-bold';
+   cell.textContent='★ FREE ★';
+  }else{
+   const songTitle = data.songs[songIdx++];
+   cell.className=`bingo-cell-item p-1.5 sm:p-3 min-h-[55px] sm:min-h-[70px] flex items-center justify-center text-center text-[9px] sm:text-xs font-semibold rounded-lg sm:rounded-xl border transition-all cursor-pointer select-none leading-tight overflow-hidden bg-white hover:bg-amber-50 hover:border-amber-300 border-slate-200 text-slate-700 shadow-2xs`;
+   cell.setAttribute('data-song', songTitle);
+   cell.textContent = songTitle;
+   
+   cell.onclick=()=> {
+     cell.classList.toggle('bg-amber-500');
+     cell.classList.toggle('text-white');
+     cell.classList.toggle('border-amber-600');
+     cell.classList.toggle('font-bold');
+     cell.classList.toggle('shadow-sm');
+     cell.classList.toggle('bg-white');
+     cell.classList.toggle('hover:bg-amber-50');
+   };
+  }
+  grid.appendChild(cell);
+ }
+
+ const actions=document.createElement('div');
+ actions.className='flex gap-2 pt-2 border-t border-slate-100';
+ 
+ const jsonString = JSON.stringify(data);
+ const cardHash = btoa(unescape(encodeURIComponent(jsonString)));
+ const fullUrl=`${location.protocol}//${location.host}${location.pathname}?card=${cardHash}`;
+ 
+ actions.innerHTML=`
+  <button class="flex-1 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5" onclick="showQR('${fullUrl}')">📱 QR Code</button>
+  <button class="flex-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5" onclick="navigator.clipboard.writeText('${fullUrl}');alert('Link copied to clipboard!')">🔗 Copy Link</button>
+ `;
+
+ card.append(header,grid,actions);
+ return card;
+}
+
+function createPrintCardElement(data){
+ const printCard = document.createElement('div');
+ printCard.className = 'bingo-card-page bg-white p-6 mb-8 border-4 border-black';
+ 
+ const centerIndex=data.useFree?Math.floor((data.size*data.size)/2):-1;
+ let songIdx=0;
+ let cellsHtml = '';
+
+ for(let i=0;i<data.size*data.size;i++){
+  const isFree = i === centerIndex;
+  const text = isFree ? '★ FREE SPACE ★' : data.songs[songIdx++];
+  cellsHtml += `
+    <div class="bingo-cell aspect-square border border-black p-2 flex items-center justify-center text-center font-bold text-black leading-tight ${isFree ? 'bingo-cell-free' : ''}">
+      ${text}
+    </div>
+  `;
+ }
+
+ printCard.innerHTML = `
+   <div class="flex justify-between items-center mb-4 border-b-2 border-black pb-2">
+     <h1 class="font-heading text-4xl font-bold uppercase tracking-widest text-black">${data.title}</h1>
+     <span class="text-sm font-bold text-black border border-black px-3 py-1">CARD #${data.id}</span>
+   </div>
+   <div class="bingo-grid grid gap-0 border-2 border-black" style="grid-template-columns: repeat(${data.size}, minmax(0, 1fr));">
+     ${cellsHtml}
+   </div>
+ `;
+ return printCard;
+}
+
+function showQR(url){
+ const qrContainer = $('qrcode');
+ qrContainer.innerHTML='';
+
+ try {
+  new QRCode(qrContainer, {
+   text: url,
+   width: 240,
+   height: 240,
+   colorDark: "#000000",
+   colorLight: "#ffffff",
+   correctLevel: QRCode.CorrectLevel.L
+  });
+  $('qrModal').classList.remove('hidden');
+ } catch(err) {
+  console.error("QR Generation failed:", err);
+  alert("Could not generate QR code for this card.");
+ }
+}
+
+function closeModal(){$('qrModal').classList.add('hidden');}
+
+// =========================================================================
+// ==================== LYRICSYNC STUDIO ENGINE ============================
+// =========================================================================
+const LS_DEMO_LRC = `[00:00.00] ♪ Neon Horizon (Synthesized Web Audio Demo) ♪
+[00:04.20] Electric pulses waking up the midnight sky
+[00:08.50] Digital waves are rolling as the beats go by
+[00:13.00] Every frequency glowing in a violet haze
+[00:17.40] Lost inside the rhythm of these synthesized days
+[00:21.80] Click any lyric line to jump right through the sound
+[00:26.20] Or drop your own MP3 and watch the words unbound
+[00:30.60] Open Lyric Syncer Editor to stamp your own track
+[00:35.00] ♪ Fading out into the neon glow... ♪`;
+
+const lsState = {
+  mode: 'file',
+  isPlaying: false,
+  duration: 0,
+  currentTime: 0,
+  volume: 0.85,
+  isMuted: false,
+  playbackRate: 1.0,
+  autoScroll: true,
+  lyrics: [],
+  activeLyricIndex: -1,
+  syncCursorLine: 0,
+  audioCtx: null,
+  analyser: null,
+  masterGain: null,
+  mediaSourceNode: null,
+  lyricFileRegistry: new Map(),
+  demoTimerId: null,
+  demoLastTick: 0,
+  demoStepIndex: 0,
+  demoStepAccumulator: 0
+};
+
+const lsDom = {
+  toastContainer: $('toast-container'),
+  dropOverlay: $('ls-drop-overlay'),
+  btnLoadDemo: $('ls-btn-load-demo'),
+  inputLyrics: $('ls-input-lyrics'),
+  trackBadge: $('ls-track-badge'),
+  lrcMatchBadge: $('ls-lrc-match-badge'),
+  lrcMatchText: $('ls-lrc-match-text'),
+  trackTitle: $('ls-track-title'),
+  trackArtist: $('ls-track-artist'),
+  discIcon: $('ls-disc-icon'),
+  libraryCount: $('ls-library-count'),
+  libraryItems: $('ls-library-items'),
+  canvas: $('ls-visualizer-canvas'),
+  visualizerIdleLabel: $('ls-visualizer-idle-label'),
+  seekSlider: $('ls-seek-slider'),
+  seekFill: $('ls-seek-fill'),
+  timeElapsed: $('ls-time-elapsed'),
+  timeRemaining: $('ls-time-remaining'),
+  btnSpeed: $('ls-btn-speed'),
+  btnRew: $('ls-btn-rew'),
+  btnPlayPause: $('ls-btn-play-pause'),
+  iconPlay: $('ls-icon-play'),
+  iconPause: $('ls-icon-pause'),
+  btnFwd: $('ls-btn-fwd'),
+  btnMute: $('ls-btn-mute'),
+  iconVolHigh: $('ls-icon-vol-high'),
+  iconVolMute: $('ls-icon-vol-mute'),
+  volumeSlider: $('ls-volume-slider'),
+  volumeFill: $('ls-volume-fill'),
+  tabKaraoke: $('ls-tab-karaoke'),
+  tabSyncer: $('ls-tab-syncer'),
+  btnAutoscroll: $('ls-btn-autoscroll'),
+  autoscrollDot: $('ls-autoscroll-dot'),
+  viewKaraoke: $('ls-view-karaoke'),
+  lyricsContainer: $('ls-lyrics-container'),
+  viewSyncer: $('ls-view-syncer'),
+  btnSyncStamp: $('ls-btn-sync-stamp'),
+  btnSyncReset: $('ls-btn-sync-reset'),
+  btnApplyLyrics: $('ls-btn-apply-lyrics'),
+  btnExportLrc: $('ls-btn-export-lrc'),
+  syncCursorIndicator: $('ls-sync-cursor-indicator'),
+  syncerTextarea: $('ls-syncer-textarea')
+};
+
+function lsShowToast(message, type = 'info') {
+  const colors = {
+    info: 'bg-slate-900 border-blue-500 text-white',
+    success: 'bg-emerald-700 border-emerald-500 text-white',
+    warning: 'bg-amber-600 border-amber-400 text-white',
+    error: 'bg-rose-700 border-rose-500 text-white'
+  };
+  const toast = document.createElement('div');
+  toast.className = `px-4 py-3 rounded-xl border shadow-lg text-xs sm:text-sm font-semibold transition-all duration-300 transform translate-x-4 opacity-0 ${colors[type] || colors.info}`;
+  toast.textContent = message;
+  lsDom.toastContainer.appendChild(toast);
+
+  requestAnimationFrame(() => {
+    toast.classList.remove('translate-x-4', 'opacity-0');
+  });
+
+  setTimeout(() => {
+    toast.classList.add('translate-x-4', 'opacity-0');
+    setTimeout(() => toast.remove(), 300);
+  }, 3200);
+}
+
+function lsFormatTime(seconds) {
+  if (!isFinite(seconds) || seconds < 0) seconds = 0;
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  const tenths = Math.floor((seconds % 1) * 10);
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${tenths}`;
+}
+
+function lsFormatLrcTimestamp(seconds) {
+  if (!isFinite(seconds) || seconds < 0) seconds = 0;
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  const hundredths = Math.floor((seconds % 1) * 100);
+  return `[${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${String(hundredths).padStart(2, '0')}]`;
+}
+
+function lsUpdateLrcMatchBadge(status, labelText) {
+  lsDom.lrcMatchText.textContent = labelText;
+  lsDom.lrcMatchBadge.title = labelText;
+
+  if (status === 'matched') {
+    lsDom.lrcMatchBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800';
+    lsDom.lrcMatchBadge.querySelector('svg').innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>';
+  } else if (status === 'embedded') {
+    lsDom.lrcMatchBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800';
+    lsDom.lrcMatchBadge.querySelector('svg').innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>';
+  } else {
+    lsDom.lrcMatchBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800';
+    lsDom.lrcMatchBadge.querySelector('svg').innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>';
+  }
+}
+
+function lsEnsureAudioContext() {
+  if (!lsState.audioCtx) {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    lsState.audioCtx = new AudioCtx();
+    lsState.analyser = lsState.audioCtx.createAnalyser();
+    lsState.analyser.fftSize = 256;
+    lsState.analyser.smoothingTimeConstant = 0.82;
+
+    try {
+      lsState.mediaSourceNode = lsState.audioCtx.createMediaElementSource(audio);
+      lsState.masterGain = lsState.audioCtx.createGain();
+      lsState.masterGain.gain.value = lsState.isMuted ? 0 : lsState.volume;
+
+      lsState.mediaSourceNode.connect(lsState.masterGain);
+      lsState.masterGain.connect(lsState.analyser);
+      lsState.analyser.connect(lsState.audioCtx.destination);
+    } catch (e) {
+      console.warn('AudioContext node connection warning:', e);
+    }
+  }
+  if (lsState.audioCtx.state === 'suspended') {
+    lsState.audioCtx.resume();
+  }
+}
+
+audio.addEventListener('play', () => {
+  lsState.isPlaying = true;
+  lsEnsureAudioContext();
+  lsDom.iconPlay.classList.add('hidden');
+  lsDom.iconPause.classList.remove('hidden');
+  lsDom.visualizerIdleLabel.classList.add('hidden');
+  lsDom.discIcon.classList.add('animate-spin');
+});
+
+audio.addEventListener('pause', () => {
+  if (lsState.mode === 'file') {
+    lsState.isPlaying = false;
+    lsDom.iconPlay.classList.remove('hidden');
+    lsDom.iconPause.classList.add('hidden');
+    lsDom.discIcon.classList.remove('animate-spin');
+  }
+});
+
+audio.addEventListener('timeupdate', () => {
+  if (lsState.mode === 'file' && isFinite(audio.currentTime)) {
+    lsState.currentTime = audio.currentTime;
+    lsState.duration = audio.duration || 0;
+    lsUpdateTimeUI();
+    lsUpdateActiveLyric();
+  }
+});
+
+audio.addEventListener('ended', () => {
+  if (lsState.mode === 'file') {
+    lsState.isPlaying = false;
+    lsDom.iconPlay.classList.remove('hidden');
+    lsDom.iconPause.classList.add('hidden');
+    lsDom.discIcon.classList.remove('animate-spin');
+    lsSeekTo(0);
+  }
+});
+
+function lsPlayDemoSynthStep(stepIndex) {
+  if (!lsState.audioCtx || lsState.isMuted) return;
+  const now = lsState.audioCtx.currentTime;
+
+  const chords = [
+    [220.00, 261.63, 329.63],
+    [174.61, 220.00, 261.63],
+    [261.63, 329.63, 392.00],
+    [196.00, 246.94, 293.66]
+  ];
+  const bassNotes = [110.00, 87.31, 130.81, 98.00];
+  const barIdx = Math.floor(stepIndex / 8) % chords.length;
+  const subStep = stepIndex % 8;
+
+  const chord = chords[barIdx];
+  const arpFreq = chord[subStep % chord.length] * (subStep >= 4 ? 2 : 1);
+  const osc = lsState.audioCtx.createOscillator();
+  const gain = lsState.audioCtx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(arpFreq, now);
+
+  gain.gain.setValueAtTime(0.001, now);
+  gain.gain.exponentialRampToValueAtTime(0.14, now + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0008, now + 0.24);
+
+  osc.connect(gain);
+  if (lsState.masterGain) {
+    gain.connect(lsState.masterGain);
+  } else {
+    gain.connect(lsState.audioCtx.destination);
+  }
+  osc.start(now);
+  osc.stop(now + 0.26);
+
+  if (subStep % 2 === 0) {
+    const bassOsc = lsState.audioCtx.createOscillator();
+    const bassGain = lsState.audioCtx.createGain();
+    bassOsc.type = 'sawtooth';
+    bassOsc.frequency.setValueAtTime(bassNotes[barIdx], now);
+
+    const filter = lsState.audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(360, now);
+
+    bassGain.gain.setValueAtTime(0.001, now);
+    bassGain.gain.exponentialRampToValueAtTime(0.18, now + 0.015);
+    bassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+    bassOsc.connect(filter);
+    filter.connect(bassGain);
+    if (lsState.masterGain) {
+      bassGain.connect(lsState.masterGain);
+    } else {
+      bassGain.connect(lsState.audioCtx.destination);
+    }
+    bassOsc.start(now);
+    bassOsc.stop(now + 0.24);
+  }
+}
+
+function lsStartDemoLoop() {
+  lsStopDemoLoop();
+  lsState.demoLastTick = performance.now();
+  const stepDuration = 60 / 110 / 2;
+
+  lsState.demoTimerId = setInterval(() => {
+    if (!lsState.isPlaying || lsState.mode !== 'demo') return;
+    const now = performance.now();
+    const delta = ((now - lsState.demoLastTick) / 1000) * lsState.playbackRate;
+    lsState.demoLastTick = now;
+
+    lsState.currentTime += delta;
+    lsState.demoStepAccumulator += delta;
+
+    if (lsState.demoStepAccumulator >= stepDuration) {
+      lsState.demoStepAccumulator %= stepDuration;
+      lsPlayDemoSynthStep(lsState.demoStepIndex++);
+    }
+
+    if (lsState.currentTime >= lsState.duration) {
+      lsState.currentTime = 0;
+      lsState.demoStepIndex = 0;
+      lsPausePlayback();
+    }
+
+    lsUpdateTimeUI();
+    lsUpdateActiveLyric();
+  }, 30);
+}
+
+function lsStopDemoLoop() {
+  if (lsState.demoTimerId) {
+    clearInterval(lsState.demoTimerId);
+    lsState.demoTimerId = null;
+  }
+}
+
+function lsStartPlayback() {
+  lsEnsureAudioContext();
+  lsState.isPlaying = true;
+  lsDom.iconPlay.classList.add('hidden');
+  lsDom.iconPause.classList.remove('hidden');
+  lsDom.visualizerIdleLabel.classList.add('hidden');
+  lsDom.discIcon.classList.add('animate-spin');
+
+  if (lsState.mode === 'demo') {
+    lsStartDemoLoop();
+  } else if (lsState.mode === 'file') {
+    audio.playbackRate = lsState.playbackRate;
+    audio.play().catch((err) => {
+      console.error(err);
+      lsShowToast('Unable to start audio playback.', 'error');
+    });
+  }
+}
+
+function lsPausePlayback() {
+  lsState.isPlaying = false;
+  lsDom.iconPlay.classList.remove('hidden');
+  lsDom.iconPause.classList.add('hidden');
+  lsDom.discIcon.classList.remove('animate-spin');
+
+  if (lsState.mode === 'demo') {
+    lsStopDemoLoop();
+  } else if (lsState.mode === 'file') {
+    audio.pause();
+  }
+}
+
+function lsTogglePlayPause() {
+  if (lsState.isPlaying) {
+    lsPausePlayback();
+  } else {
+    lsStartPlayback();
+  }
+}
+
+function lsSeekTo(seconds) {
+  const clamped = Math.max(0, Math.min(lsState.duration || 0, seconds));
+  lsState.currentTime = clamped;
+  if (lsState.mode === 'file' && isFinite(audio.duration)) {
+    audio.currentTime = clamped;
+  } else if (lsState.mode === 'demo') {
+    const stepDuration = 60 / 110 / 2;
+    lsState.demoStepIndex = Math.floor(clamped / stepDuration);
+  }
+  lsUpdateTimeUI();
+  lsUpdateActiveLyric(true);
+}
+
+function lsUpdateTimeUI() {
+  const dur = lsState.duration || 0;
+  const cur = lsState.currentTime || 0;
+  const pct = dur > 0 ? Math.min(100, (cur / dur) * 100) : 0;
+
+  lsDom.seekSlider.value = pct;
+  lsDom.seekFill.style.width = `${pct}%`;
+  lsDom.timeElapsed.textContent = lsFormatTime(cur);
+  lsDom.timeRemaining.textContent = `-${lsFormatTime(Math.max(0, dur - cur))}`;
+}
+
+function lsParseLyricsText(rawText) {
+  const lines = rawText.split(/\r?\n/);
+  const parsed = [];
+  const timeTagRegex = /\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\]/g;
+  const metadataTagRegex = /^\[(ar|ti|al|au|by|offset|length|re|ve):.*\]$/i;
+  let hasAnyTimestamp = false;
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed || metadataTagRegex.test(trimmed)) continue;
+
+    const matches = [...trimmed.matchAll(timeTagRegex)];
+    if (matches.length > 0) {
+      hasAnyTimestamp = true;
+      const lyricContent = trimmed.replace(timeTagRegex, '').trim();
+      for (const match of matches) {
+        const mins = parseInt(match[1], 10);
+        const secs = parseInt(match[2], 10);
+        const fracStr = match[3] || '0';
+        const frac = parseInt(fracStr, 10) / Math.pow(10, fracStr.length);
+        const totalSeconds = mins * 60 + secs + frac;
+        parsed.push({
+          time: totalSeconds,
+          text: lyricContent || '♪ Instrumental ♪'
+        });
+      }
+    } else {
+      parsed.push({ time: null, text: trimmed });
+    }
+  }
+
+  if (hasAnyTimestamp) {
+    return parsed
+      .filter((item) => item.time !== null)
+      .sort((a, b) => a.time - b.time);
+  } else {
+    const dur = lsState.duration > 0 ? lsState.duration : Math.max(30, parsed.length * 4);
+    return parsed.map((item, idx) => ({
+      time: (idx / Math.max(1, parsed.length)) * dur,
+      text: item.text
+    }));
+  }
+}
+
+function lsRenderLyricsList() {
+  lsDom.lyricsContainer.innerHTML = '';
+
+  if (!lsState.lyrics || lsState.lyrics.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'h-full flex flex-col items-center justify-center text-center text-slate-400 py-16 gap-2';
+    empty.innerHTML = `
+      <p class="text-sm font-semibold text-slate-600">No lyrics loaded for this track yet</p>
+      <p class="text-xs text-slate-400 max-w-sm">Drop a matching <code class="text-blue-600 font-mono-code">.lrc</code> file anywhere on the page, click <strong>Load .LRC</strong>, or switch to <strong>Lyric Syncer Editor</strong> to paste & time your own lyrics.</p>
+    `;
+    lsDom.lyricsContainer.appendChild(empty);
+    return;
+  }
+
+  lsState.lyrics.forEach((line, idx) => {
+    const row = document.createElement('div');
+    row.dataset.index = idx;
+    row.className = 'lyric-line future cursor-pointer rounded-xl px-4 py-2.5 hover:bg-slate-50 flex items-baseline gap-3.5 select-none border border-transparent';
+
+    const badge = document.createElement('span');
+    badge.className = 'text-[11px] font-mono-code text-slate-400 shrink-0 w-12';
+    badge.textContent = lsFormatTime(line.time);
+
+    const textEl = document.createElement('p');
+    textEl.className = 'text-base sm:text-lg font-semibold text-slate-700 leading-snug';
+    textEl.textContent = line.text;
+
+    row.appendChild(badge);
+    row.appendChild(textEl);
+
+    row.addEventListener('click', () => {
+      lsSeekTo(line.time);
+      if (!lsState.isPlaying) lsStartPlayback();
+    });
+
+    lsDom.lyricsContainer.appendChild(row);
+  });
+}
+
+function lsUpdateActiveLyric(forceScroll = false) {
+  if (!lsState.lyrics || lsState.lyrics.length === 0) return;
+
+  let newIndex = -1;
+  for (let i = 0; i < lsState.lyrics.length; i++) {
+    if (lsState.currentTime >= lsState.lyrics[i].time - 0.08) {
+      newIndex = i;
+    } else {
+      break;
+    }
+  }
+
+  if (newIndex === lsState.activeLyricIndex && !forceScroll) return;
+  lsState.activeLyricIndex = newIndex;
+
+  const rows = lsDom.lyricsContainer.querySelectorAll('.lyric-line');
+  rows.forEach((row, idx) => {
+    const textEl = row.querySelector('p');
+    const badgeEl = row.querySelector('span');
+    row.classList.remove('active', 'past', 'future', 'bg-blue-50', 'border-blue-200');
+    row.classList.add('border-transparent');
+
+    if (idx === newIndex) {
+      row.classList.remove('border-transparent');
+      row.classList.add('active', 'bg-blue-50', 'border-blue-200');
+      textEl.className = 'text-lg sm:text-xl font-extrabold text-blue-700 leading-snug';
+      badgeEl.className = 'text-xs font-mono-code font-bold text-blue-600 shrink-0 w-12';
+
+      if (lsState.autoScroll) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    } else if (idx < newIndex) {
+      row.classList.add('past');
+      textEl.className = 'text-base font-medium text-slate-400 leading-snug';
+      badgeEl.className = 'text-[11px] font-mono-code text-slate-400 shrink-0 w-12';
+    } else {
+      row.classList.add('future');
+      textEl.className = 'text-base sm:text-lg font-semibold text-slate-700 leading-snug';
+      badgeEl.className = 'text-[11px] font-mono-code text-slate-400 shrink-0 w-12';
+    }
+  });
+}
+
+function lsLoadLyricsIntoApp(rawText, sourceName = 'Lyrics', silentToast = false) {
+  lsDom.syncerTextarea.value = rawText;
+  lsState.lyrics = lsParseLyricsText(rawText);
+  lsState.activeLyricIndex = -1;
+  lsState.syncCursorLine = 0;
+  lsUpdateSyncCursorIndicator();
+  lsRenderLyricsList();
+  lsUpdateActiveLyric(true);
+  if (!silentToast) {
+    lsShowToast(`Loaded ${lsState.lyrics.length} lyric lines from ${sourceName}`, 'success');
+  }
+}
+
+function lsClearLyricsForUnmatchedTrack(stemName) {
+  lsDom.syncerTextarea.value = '';
+  lsState.lyrics = [];
+  lsState.activeLyricIndex = -1;
+  lsState.syncCursorLine = 0;
+  lsUpdateSyncCursorIndicator();
+  lsRenderLyricsList();
+  lsUpdateLrcMatchBadge('missing', `No ${stemName}.lrc found`);
+}
+
+async function lsExtractEmbeddedId3Lyrics(file) {
+  try {
+    const slice = file.slice(0, 524288);
+    const buffer = await slice.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+
+    if (bytes.length < 10 || bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) {
+      return null;
+    }
+
+    const majorVersion = bytes[3];
+    const flags = bytes[5];
+    const tagSize = ((bytes[6] & 0x7f) << 21) |
+                    ((bytes[7] & 0x7f) << 14) |
+                    ((bytes[8] & 0x7f) << 7) |
+                    (bytes[9] & 0x7f);
+
+    let offset = 10;
+    if ((flags & 0x40) !== 0 && offset + 4 <= bytes.length) {
+      const extSize = (bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3];
+      offset += 4 + extSize;
+    }
+
+    const maxOffset = Math.min(bytes.length, 10 + tagSize);
+
+    while (offset + 10 <= maxOffset) {
+      const frameId = String.fromCharCode(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]);
+      if (!/^[A-Z0-9]{4}$/.test(frameId)) break;
+
+      let frameSize = 0;
+      if (majorVersion === 4) {
+        frameSize = ((bytes[offset + 4] & 0x7f) << 21) |
+                    ((bytes[offset + 5] & 0x7f) << 14) |
+                    ((bytes[offset + 6] & 0x7f) << 7) |
+                    (bytes[offset + 7] & 0x7f);
+      } else {
+        frameSize = (bytes[offset + 4] << 24) |
+                    (bytes[offset + 5] << 16) |
+                    (bytes[offset + 6] << 8) |
+                    bytes[offset + 7];
+      }
+
+      if (frameSize <= 0 || offset + 10 + frameSize > maxOffset) break;
+
+      if (frameId === 'USLT') {
+        const frameData = bytes.slice(offset + 10, offset + 10 + frameSize);
+        const encoding = frameData[0];
+        let textStart = 4;
+
+        if (encoding === 1 || encoding === 2) {
+          while (textStart + 1 < frameData.length) {
+            if (frameData[textStart] === 0 && frameData[textStart + 1] === 0) {
+              textStart += 2;
+              break;
+            }
+            textStart += 2;
+          }
+          const decoderName = encoding === 2 ? 'utf-16be' : 'utf-16';
+          const decoded = new TextDecoder(decoderName).decode(frameData.slice(textStart));
+          return decoded.replace(/\0/g, '').trim();
+        } else {
+          while (textStart < frameData.length && frameData[textStart] !== 0) {
+            textStart++;
+          }
+          textStart++;
+          const decoderName = encoding === 3 ? 'utf-8' : 'iso-8859-1';
+          const decoded = new TextDecoder(decoderName).decode(frameData.slice(textStart));
+          return decoded.replace(/\0/g, '').trim();
+        }
+      }
+
+      offset += 10 + frameSize;
+    }
+  } catch (e) {
+    console.warn('ID3 lyric inspection skipped:', e);
+  }
+  return null;
+}
+
+async function lsResolveAccompanyingLyrics(audioFile) {
+  const baseKey = audioFile.name.replace(/\.[^/.]+$/, '').trim().toLowerCase();
+  const rawStem = audioFile.name.replace(/\.[^/.]+$/, '').trim();
+
+  if (lsState.lyricFileRegistry.has(baseKey)) {
+    const entry = lsState.lyricFileRegistry.get(baseKey);
+    try {
+      const fileObj = entry.file ? entry.file : await entry.handle.getFile();
+      const text = await fileObj.text();
+      lsLoadLyricsIntoApp(text, fileObj.name, true);
+      lsUpdateLrcMatchBadge('matched', `Auto-paired: ${fileObj.name}`);
+      lsShowToast(`Auto-loaded accompanying lyrics: ${fileObj.name}`, 'success');
+      return true;
+    } catch (err) {
+      console.warn('Failed reading matched lyric file:', err);
+    }
+  }
+
+  if (window.location.protocol.startsWith('http')) {
+    try {
+      const encodedUrl = encodeURIComponent(`${rawStem}.lrc`);
+      const resp = await fetch(encodedUrl);
+      if (resp.ok) {
+        const contentType = resp.headers.get('content-type') || '';
+        if (!contentType.includes('text/html')) {
+          const text = await resp.text();
+          if (text.trim().length > 0) {
+            lsLoadLyricsIntoApp(text, `${rawStem}.lrc`, true);
+            lsUpdateLrcMatchBadge('matched', `Fetched: ${rawStem}.lrc`);
+            lsShowToast(`Fetched accompanying lyrics: ${rawStem}.lrc`, 'success');
+            return true;
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  if (/\.mp3$/i.test(audioFile.name)) {
+    const embeddedText = await lsExtractEmbeddedId3Lyrics(audioFile);
+    if (embeddedText && embeddedText.length > 0) {
+      lsLoadLyricsIntoApp(embeddedText, `${audioFile.name} (ID3 Embedded)`, true);
+      lsUpdateLrcMatchBadge('embedded', 'Embedded MP3 Lyrics');
+      lsShowToast(`Extracted embedded ID3 lyrics from ${audioFile.name}`, 'success');
+      return true;
+    }
+  }
+
+  lsClearLyricsForUnmatchedTrack(rawStem);
+  lsShowToast(`Loaded ${audioFile.name}. No matching "${rawStem}.lrc" found — load or drop it anytime!`, 'warning');
+  return false;
+}
+
+async function lsHandleManagerSongPlay(songItem) {
+  lsState.mode = 'file';
+  const cleanName = songItem.file.name.replace(/\.[^/.]+$/, '').trim();
+  lsDom.trackTitle.textContent = cleanName;
+  lsDom.trackTitle.title = cleanName;
+  lsDom.trackArtist.textContent = `Manager Library Track • ${(songItem.file.size / (1024 * 1024)).toFixed(2)} MB`;
+  lsDom.trackBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span> Manager Song Loaded`;
+  lsDom.trackBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800';
+
+  await lsResolveAccompanyingLyrics(songItem.file);
+}
+
+function lsLoadLyricsFile(file) {
+  if (!file) return;
+  lsState.lyricFileRegistry.set(file.name.replace(/\.[^/.]+$/, '').trim().toLowerCase(), { file, ext: file.name.split('.').pop().toLowerCase() });
+  
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    lsLoadLyricsIntoApp(e.target.result, file.name);
+    lsUpdateLrcMatchBadge('matched', `Loaded: ${file.name}`);
+  };
+  reader.onerror = () => {
+    lsShowToast('Error reading lyrics file.', 'error');
+  };
+  reader.readAsText(file);
+}
+
+function renderManagerLibraryDrawer() {
+  const allSongs = [...available, ...selected];
+  lsDom.libraryCount.textContent = `${allSongs.length} tracks`;
+
+  if (allSongs.length === 0) {
+    lsDom.libraryItems.innerHTML = `<div class="text-center py-6 text-slate-400 text-xs">No MP3 folder loaded in Song Manager yet.</div>`;
+    return;
+  }
+
+  lsDom.libraryItems.innerHTML = '';
+  allSongs.forEach((song, idx) => {
+    const title = displayTitleOf(song);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `w-full text-left px-2.5 py-2 rounded-xl flex items-center justify-between gap-2 text-xs transition text-slate-700 hover:bg-slate-50`;
+    
+    btn.innerHTML = `
+      <div class="flex items-center gap-2 min-w-0">
+        <span class="font-mono-code text-[11px] text-slate-400">${String(idx + 1).padStart(2, '0')}</span>
+        <span class="truncate font-medium">${title}</span>
+      </div>
+      <span class="shrink-0 px-2 py-0.5 rounded text-[10px] font-mono-code bg-blue-100 text-blue-700 font-bold">Play</span>
+    `;
+
+    btn.addEventListener('click', () => {
+      playSong(song.id);
+    });
+
+    lsDom.libraryItems.appendChild(btn);
+  });
+}
+
+function lsActivateDemoTrack() {
+  lsPausePlayback();
+  lsState.mode = 'demo';
+  lsState.duration = 38.0;
+  lsState.currentTime = 0;
+  lsState.demoStepIndex = 0;
+  lsState.demoStepAccumulator = 0;
+
+  audio.pause();
+  audio.removeAttribute('src');
+
+  lsDom.trackTitle.textContent = 'Neon Horizon (Synthwave Demo)';
+  lsDom.trackTitle.title = 'Neon Horizon (Synthwave Demo)';
+  lsDom.trackArtist.textContent = 'Web Audio API Synthesizer • 110 BPM';
+  lsDom.trackBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Built-in Synth Demo`;
+  lsDom.trackBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800';
+  lsUpdateLrcMatchBadge('matched', 'Demo .LRC Synced');
+
+  lsUpdateTimeUI();
+  lsLoadLyricsIntoApp(LS_DEMO_LRC, 'Built-in Demo LRC', true);
+}
+
+function lsUpdateSyncCursorIndicator() {
+  const lines = lsDom.syncerTextarea.value.split(/\r?\n/);
+  const total = lines.length;
+  const current = Math.min(lsState.syncCursorLine + 1, total);
+  lsDom.syncCursorIndicator.textContent = `Next Line: #${current} of ${total}`;
+}
+
+function lsStampCurrentLineTimestamp() {
+  const lines = lsDom.syncerTextarea.value.split(/\r?\n/);
+  while (lsState.syncCursorLine < lines.length && lines[lsState.syncCursorLine].trim() === '') {
+    lsState.syncCursorLine++;
+  }
+
+  if (lsState.syncCursorLine >= lines.length) {
+    lsShowToast('Reached the end of lyrics! Click Reset Cursor to start over.', 'warning');
+    return;
+  }
+
+  const stamp = lsFormatLrcTimestamp(lsState.currentTime);
+  const stripped = lines[lsState.syncCursorLine].replace(/^(\[\d{1,3}:\d{2}(?:\.\d{1,3})?\])+/, '').trim();
+  lines[lsState.syncCursorLine] = `${stamp} ${stripped}`;
+
+  lsDom.syncerTextarea.value = lines.join('\n');
+  lsState.syncCursorLine++;
+  lsUpdateSyncCursorIndicator();
+
+  lsState.lyrics = lsParseLyricsText(lsDom.syncerTextarea.value);
+  lsRenderLyricsList();
+  lsUpdateActiveLyric(true);
+}
+
+function lsExportLrcFile() {
+  const content = lsDom.syncerTextarea.value.trim();
+  if (!content) {
+    lsShowToast('Nothing to export! Add lyrics first.', 'warning');
+    return;
+  }
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const safeTitle = (lsDom.trackTitle.textContent || 'lyrics').replace(/[^a-z0-9_\-\s]/gi, '').trim().replace(/\s+/g, '_');
+  a.href = url;
+  a.download = `${safeTitle || 'synchronized_lyrics'}.lrc`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  lsShowToast(`Exported ${a.download}`, 'success');
+}
+
+function lsResizeVisualizerCanvas() {
+  if (!lsDom.canvas || !lsDom.canvas.parentElement) return;
+  const rect = lsDom.canvas.parentElement.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return;
+  const dpr = window.devicePixelRatio || 1;
+  lsDom.canvas.width = rect.width * dpr;
+  lsDom.canvas.height = rect.height * dpr;
+}
+
+function lsRenderVisualizerLoop() {
+  if (lsDom.canvas && lsDom.canvas.width > 0 && lsDom.canvas.height > 0) {
+    const ctx = lsDom.canvas.getContext('2d');
+    const width = lsDom.canvas.width;
+    const height = lsDom.canvas.height;
+    ctx.clearRect(0, 0, width, height);
+
+    if (lsState.analyser && lsState.isPlaying) {
+      const bufferLength = lsState.analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      lsState.analyser.getByteFrequencyData(dataArray);
+
+      const bars = 48;
+      const step = Math.floor(bufferLength * 0.75 / bars);
+      const gap = 4 * (window.devicePixelRatio || 1);
+      const barWidth = Math.max(2, (width - gap * (bars + 1)) / bars);
+
+      const gradient = ctx.createLinearGradient(0, height, 0, 0);
+      gradient.addColorStop(0, '#2563eb');
+      gradient.addColorStop(0.5, '#6366f1');
+      gradient.addColorStop(1, '#9333ea');
+
+      ctx.fillStyle = gradient;
+
+      for (let i = 0; i < bars; i++) {
+        const val = dataArray[i * step] || 0;
+        const normalized = val / 255;
+        const barHeight = Math.max(4, normalized * (height * 0.82));
+        const x = gap + i * (barWidth + gap);
+        const y = (height - barHeight) / 2;
+
+        ctx.beginPath();
+        if (ctx.roundRect) {
+          ctx.roundRect(x, y, barWidth, barHeight, barWidth / 2);
+        } else {
+          ctx.rect(x, y, barWidth, barHeight);
+        }
+        ctx.fill();
+      }
+    } else {
+      ctx.strokeStyle = 'rgba(37, 99, 235, 0.2)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, height / 2);
+      ctx.lineTo(width, height / 2);
+      ctx.stroke();
+    }
+  }
+
+  requestAnimationFrame(lsRenderVisualizerLoop);
+}
+
+function lsBindEvents() {
+  lsDom.btnPlayPause.addEventListener('click', lsTogglePlayPause);
+  lsDom.btnRew.addEventListener('click', () => lsSeekTo(lsState.currentTime - 5));
+  lsDom.btnFwd.addEventListener('click', () => lsSeekTo(lsState.currentTime + 5));
+
+  lsDom.seekSlider.addEventListener('input', (e) => {
+    const pct = parseFloat(e.target.value);
+    const targetTime = (pct / 100) * lsState.duration;
+    lsSeekTo(targetTime);
+  });
+
+  lsDom.volumeSlider.addEventListener('input', (e) => {
+    lsState.volume = parseFloat(e.target.value);
+    lsState.isMuted = lsState.volume === 0;
+    lsDom.volumeFill.style.width = `${lsState.volume * 100}%`;
+    lsDom.iconVolHigh.classList.toggle('hidden', lsState.isMuted);
+    lsDom.iconVolMute.classList.toggle('hidden', !lsState.isMuted);
+    audio.volume = lsState.volume;
+    if (lsState.masterGain) {
+      lsState.masterGain.gain.value = lsState.isMuted ? 0 : lsState.volume;
+    }
+  });
+
+  lsDom.btnMute.addEventListener('click', () => {
+    lsState.isMuted = !lsState.isMuted;
+    lsDom.iconVolHigh.classList.toggle('hidden', lsState.isMuted);
+    lsDom.iconVolMute.classList.toggle('hidden', !lsState.isMuted);
+    lsDom.volumeFill.style.width = lsState.isMuted ? '0%' : `${lsState.volume * 100}%`;
+    audio.muted = lsState.isMuted;
+    if (lsState.masterGain) {
+      lsState.masterGain.gain.value = lsState.isMuted ? 0 : lsState.volume;
+    }
+  });
+
+  const speeds = [1.0, 1.25, 1.5, 0.75];
+  let speedIdx = 0;
+  lsDom.btnSpeed.addEventListener('click', () => {
+    speedIdx = (speedIdx + 1) % speeds.length;
+    lsState.playbackRate = speeds[speedIdx];
+    lsDom.btnSpeed.textContent = `${lsState.playbackRate.toFixed(2).replace(/\.00$/, '.0')}x`;
+    audio.playbackRate = lsState.playbackRate;
+    lsShowToast(`Playback speed: ${lsDom.btnSpeed.textContent}`, 'info');
+  });
+
+  lsDom.tabKaraoke.addEventListener('click', () => {
+    lsDom.tabKaraoke.className = 'px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold bg-blue-600 text-white shadow-sm transition flex items-center gap-1.5';
+    lsDom.tabSyncer.className = 'px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 transition flex items-center gap-1.5';
+    lsDom.viewKaraoke.classList.remove('hidden');
+    lsDom.viewSyncer.classList.add('hidden');
+    lsDom.viewSyncer.classList.remove('flex');
+    lsUpdateActiveLyric(true);
+  });
+
+  lsDom.tabSyncer.addEventListener('click', () => {
+    lsDom.tabSyncer.className = 'px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold bg-purple-600 text-white shadow-sm transition flex items-center gap-1.5';
+    lsDom.tabKaraoke.className = 'px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 transition flex items-center gap-1.5';
+    lsDom.viewSyncer.classList.remove('hidden');
+    lsDom.viewSyncer.classList.add('flex');
+    lsDom.viewKaraoke.classList.add('hidden');
+    lsUpdateSyncCursorIndicator();
+  });
+
+  lsDom.btnAutoscroll.addEventListener('click', () => {
+    lsState.autoScroll = !lsState.autoScroll;
+    lsDom.autoscrollDot.className = lsState.autoScroll
+      ? 'w-2 h-2 rounded-full bg-blue-600'
+      : 'w-2 h-2 rounded-full bg-slate-400';
+    lsDom.btnAutoscroll.querySelector('span:last-child').textContent = `Auto-Scroll: ${lsState.autoScroll ? 'ON' : 'OFF'}`;
+    if (lsState.autoScroll) lsUpdateActiveLyric(true);
+  });
+
+  lsDom.btnLoadDemo.addEventListener('click', lsActivateDemoTrack);
+  lsDom.inputLyrics.addEventListener('change', (e) => {
+    if (e.target.files[0]) lsLoadLyricsFile(e.target.files[0]);
+    e.target.value = '';
+  });
+
+  lsDom.btnSyncStamp.addEventListener('click', lsStampCurrentLineTimestamp);
+  lsDom.btnSyncReset.addEventListener('click', () => {
+    lsState.syncCursorLine = 0;
+    lsUpdateSyncCursorIndicator();
+    lsShowToast('Sync cursor reset to Line #1', 'info');
+  });
+  lsDom.btnApplyLyrics.addEventListener('click', () => {
+    lsLoadLyricsIntoApp(lsDom.syncerTextarea.value, 'Syncer Editor');
+  });
+  lsDom.btnExportLrc.addEventListener('click', lsExportLrcFile);
+  lsDom.syncerTextarea.addEventListener('input', lsUpdateSyncCursorIndicator);
+
+  window.addEventListener('keydown', (e) => {
+    if (activeMainTab !== 'lyricSyncView') return;
+    if (document.activeElement === lsDom.syncerTextarea || document.activeElement.tagName === 'INPUT') return;
+
+    if (e.code === 'Space') {
+      e.preventDefault();
+      lsTogglePlayPause();
+    } else if (e.code === 'ArrowLeft') {
+      e.preventDefault();
+      lsSeekTo(lsState.currentTime - 3);
+    } else if (e.code === 'ArrowRight') {
+      e.preventDefault();
+      lsSeekTo(lsState.currentTime + 3);
+    } else if (e.key.toLowerCase() === 't' && !lsDom.viewSyncer.classList.contains('hidden')) {
+      e.preventDefault();
+      lsStampCurrentLineTimestamp();
+    }
+  });
+
+  window.addEventListener('resize', () => {
+    if (activeMainTab === 'lyricSyncView') lsResizeVisualizerCanvas();
+  });
+}
+
+// Initialize App
+lsBindEvents();
+lsActivateDemoTrack();
+lsRenderVisualizerLoop();
+
+$('moveCurrent').onclick=()=>{if(currentId)moveSelected(currentId)};
+$('shuffleBtn').onclick=shuffleAndPlay;
+$('search').oninput=render;
+$('clearSearch').onclick=()=>{$('search').value='';render()};
+$('returnAll').onclick=()=>{available.push(...selected);selected=[];render();updateCardHighlights();};
+$('export').onclick=()=>{
+ const text=selected.map((x,i)=>`${i+1}. ${displayTitleOf(x)}`).join('\n');
+ if(!text){alert('No selected songs to export.');return;}
+ const blob=new Blob([text],{type:'text/plain'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=url;a.download='selected-songs.txt';a.click();URL.revokeObjectURL(url);
+};
+render();
+</script>
+</body>
+</html>
