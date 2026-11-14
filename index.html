@@ -94,7 +94,7 @@
     transform: scale(1.2);
   }
 
-  /* Printable Styles */
+  /* Printable Styles with Rounded Borders */
   @media print {
     body {
       background-color: #ffffff !important;
@@ -111,24 +111,31 @@
     .bingo-card-page {
       page-break-after: always;
       break-after: page;
-      padding: 1rem;
+      padding: 1.25rem;
       margin: 0 auto;
       max-width: 100% !important;
       box-shadow: none !important;
-      border: 3px solid #000 !important;
+      border: 2px solid #1e293b !important;
+      border-radius: 1rem !important;
+      background: #ffffff !important;
     }
     .bingo-grid {
-      gap: 0 !important;
-      border: 2px solid #000 !important;
+      gap: 0.5rem !important;
+      border: none !important;
+      background: transparent !important;
     }
     .bingo-cell {
-      border: 1px solid #000 !important;
-      background: #fff !important;
-      color: #000 !important;
-      font-size: 11pt !important;
+      border: 1.5px solid #cbd5e1 !important;
+      border-radius: 0.75rem !important;
+      background: #f8fafc !important;
+      color: #1e293b !important;
+      font-size: 10.5pt !important;
+      padding: 0.5rem !important;
     }
     .bingo-cell-free {
-      background: #f0f0f0 !important;
+      background: #fef3c7 !important;
+      border-color: #fcd34d !important;
+      color: #92400e !important;
       font-weight: bold !important;
     }
   }
@@ -1342,7 +1349,7 @@ function createCardElement(data){
 
 function createPrintCardElement(data){
  const printCard = document.createElement('div');
- printCard.className = 'bingo-card-page bg-white p-6 mb-8 border-4 border-black';
+ printCard.className = 'bingo-card-page bg-white p-6 mb-8';
  
  const centerIndex=data.useFree?Math.floor((data.size*data.size)/2):-1;
  let songIdx=0;
@@ -1352,18 +1359,18 @@ function createPrintCardElement(data){
   const isFree = i === centerIndex;
   const text = isFree ? '★ FREE SPACE ★' : data.songs[songIdx++];
   cellsHtml += `
-    <div class="bingo-cell aspect-square border border-black p-2 flex items-center justify-center text-center font-bold text-black leading-tight ${isFree ? 'bingo-cell-free' : ''}">
+    <div class="bingo-cell aspect-square p-2 flex items-center justify-center text-center font-bold text-slate-800 leading-tight ${isFree ? 'bingo-cell-free' : ''}">
       ${text}
     </div>
   `;
  }
 
  printCard.innerHTML = `
-   <div class="flex justify-between items-center mb-4 border-b-2 border-black pb-2">
-     <h1 class="font-heading text-4xl font-bold uppercase tracking-widest text-black">${data.title}</h1>
-     <span class="text-sm font-bold text-black border border-black px-3 py-1">CARD #${data.id}</span>
+   <div class="flex justify-between items-center mb-4 border-b border-slate-300 pb-3">
+     <h1 class="font-heading text-3xl font-bold uppercase tracking-wider text-slate-900">${data.title}</h1>
+     <span class="text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200 px-3 py-1 rounded-full">CARD #${data.id}</span>
    </div>
-   <div class="bingo-grid grid gap-0 border-2 border-black" style="grid-template-columns: repeat(${data.size}, minmax(0, 1fr));">
+   <div class="bingo-grid grid" style="grid-template-columns: repeat(${data.size}, minmax(0, 1fr));">
      ${cellsHtml}
    </div>
  `;
