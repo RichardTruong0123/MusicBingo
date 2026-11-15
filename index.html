@@ -138,6 +138,16 @@
       color: #92400e !important;
       font-weight: bold !important;
     }
+    input.print-card-id-input {
+      border: none !important;
+      background: transparent !important;
+      outline: none !important;
+      box-shadow: none !important;
+      font-weight: bold !important;
+      padding: 0 !important;
+      text-align: right !important;
+      color: #0f172a !important;
+    }
   }
 </style>
 </head>
@@ -706,6 +716,7 @@ const $=id=>document.getElementById(id);
 let available=[], selected=[], currentId=null, nextId=1, currentUrl=null;
 let lrcTracks=[];
 let cachedDirectoryHandle = null;
+let generatedCardsRegistry = [];
 const audio=$('audio');
 
 // Theme Management
@@ -1273,26 +1284,56 @@ function generateCards(){
  const printArea=$('printableArea');
  container.innerHTML='';
  printArea.innerHTML='';
+ generatedCardsRegistry = [];
 
  for(let c=1;c<=cardCount;c++){
   const shuffled=[...pool].sort(()=>Math.random()-0.5);
-  const cardData={title:$('cardTitle').value,size,id:c,songs:shuffled.slice(0,useFree?totalNeeded-1:totalNeeded),useFree};
-  container.appendChild(createCardElement(cardData));
-  printArea.appendChild(createPrintCardElement(cardData));
+  const cardData={
+    title:$('cardTitle').value,
+    size,
+    id: c,
+    label: `Card #${c}`,
+    songs: shuffled.slice(0, useFree ? totalNeeded - 1 : totalNeeded),
+    useFree
+  };
+  generatedCardsRegistry.push(cardData);
+  
+  container.appendChild(createCardElement(cardData, c - 1));
+  printArea.appendChild(createPrintCardElement(cardData, c - 1));
  }
  updateCardHighlights();
 }
 
-function createCardElement(data){
+function updateCardShareLink(cardIdx, labelVal) {
+  const cardData = generatedCardsRegistry[cardIdx];
+  if (!cardData) return;
+  cardData.label = labelVal;
+
+  const jsonString = JSON.stringify(cardData);
+  const cardHash = btoa(unescape(encodeURIComponent(jsonString)));
+  const fullUrl = `${location.protocol}//${location.host}${location.pathname}?card=${cardHash}`;
+  
+  const qrBtn = $(`qr-btn-${cardIdx}`);
+  const copyBtn = $(`copy-btn-${cardIdx}`);
+  if(qrBtn) qrBtn.setAttribute('onclick', `showQR('${fullUrl}')`);
+  if(copyBtn) copyBtn.setAttribute('onclick', `navigator.clipboard.writeText('${fullUrl}');alert('Link copied to clipboard!')`);
+
+  const printInput = $(`print-card-label-${cardIdx}`);
+  if(printInput) printInput.value = labelVal;
+}
+
+function createCardElement(data, cardIdx){
  const card=document.createElement('div');
  card.className='bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4';
 
  const header=document.createElement('div');
- header.className='flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3';
+ header.className='flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3 gap-2';
  header.innerHTML=`
-   <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+   <div class="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
      <h3 class="font-heading text-xl sm:text-2xl font-bold tracking-wider text-slate-800 dark:text-slate-100 truncate">${data.title}</h3>
-     <span class="text-[10px] sm:text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full whitespace-nowrap">Card #${data.id}</span>
+   </div>
+   <div class="flex items-center bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
+     <input type="text" id="card-label-input-${cardIdx}" value="${data.label}" class="bg-transparent font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus:outline-none w-28 sm:w-36 text-right" oninput="updateCardShareLink(${cardIdx}, this.value)">
    </div>
  `;
  
@@ -1339,15 +1380,15 @@ function createCardElement(data){
  const fullUrl=`${location.protocol}//${location.host}${location.pathname}?card=${cardHash}`;
  
  actions.innerHTML=`
-  <button class="flex-1 px-3 py-2 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5" onclick="showQR('${fullUrl}')">📱 QR Code</button>
-  <button class="flex-1 px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5" onclick="navigator.clipboard.writeText('${fullUrl}');alert('Link copied to clipboard!')">🔗 Copy Link</button>
+  <button id="qr-btn-${cardIdx}" class="flex-1 px-3 py-2 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5" onclick="showQR('${fullUrl}')">📱 QR Code</button>
+  <button id="copy-btn-${cardIdx}" class="flex-1 px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5" onclick="navigator.clipboard.writeText('${fullUrl}');alert('Link copied to clipboard!')">🔗 Copy Link</button>
  `;
 
  card.append(header,grid,actions);
  return card;
 }
 
-function createPrintCardElement(data){
+function createPrintCardElement(data, cardIdx){
  const printCard = document.createElement('div');
  printCard.className = 'bingo-card-page bg-white p-6 mb-8';
  
@@ -1366,9 +1407,9 @@ function createPrintCardElement(data){
  }
 
  printCard.innerHTML = `
-   <div class="flex justify-between items-center mb-4 border-b border-slate-300 pb-3">
+   <div class="flex justify-between items-center mb-4 border-b border-slate-300 pb-3 gap-2">
      <h1 class="font-heading text-3xl font-bold uppercase tracking-wider text-slate-900">${data.title}</h1>
-     <span class="text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200 px-3 py-1 rounded-full">CARD #${data.id}</span>
+     <input type="text" id="print-card-label-${cardIdx}" value="${data.label}" class="print-card-id-input font-bold text-xs text-slate-700 bg-slate-100 border border-slate-200 px-3 py-1 rounded-full text-right" readonly>
    </div>
    <div class="bingo-grid grid" style="grid-template-columns: repeat(${data.size}, minmax(0, 1fr));">
      ${cellsHtml}
@@ -2376,13 +2417,15 @@ window.addEventListener('load',()=>{
    cardWrapper.className = 'bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4';
    
    const header = document.createElement('div');
-   header.className = 'flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3';
+   header.className = 'flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3 gap-2';
    header.innerHTML = `
      <div>
        <h1 class="font-heading text-2xl sm:text-3xl font-bold tracking-wider text-slate-800 dark:text-slate-100">${cardData.title}</h1>
        <p class="text-xs text-slate-400 mt-0.5">Tap squares as songs are called to mark your card!</p>
      </div>
-     <span class="text-xs font-bold bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 px-3 py-1 rounded-full whitespace-nowrap">Card #${cardData.id}</span>
+     <div class="flex items-center gap-1 bg-blue-50 dark:bg-blue-950 text-blue-800 dark:text-blue-300 px-3 py-1 rounded-full border border-blue-200 dark:border-blue-800 shrink-0 font-bold text-xs">
+       <span>${cardData.label || 'Card #' + cardData.id}</span>
+     </div>
    `;
    
    const grid = document.createElement('div');
