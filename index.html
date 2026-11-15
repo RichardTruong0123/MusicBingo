@@ -555,8 +555,35 @@
           </div>
         </div>
 
-        <!-- VIEW 1: KARAOKE DISPLAY -->
+        <!-- VIEW 1: KARAOKE DISPLAY WITH REAL-TIME OFFSET PREVIEW SLIDER -->
         <div id="ls-view-karaoke" class="flex-1 flex flex-col overflow-hidden relative">
+          
+          <!-- LIVE SYNC OFFSET PREVIEW BAR -->
+          <div class="px-5 py-2.5 bg-indigo-50/80 dark:bg-indigo-950/50 border-b border-indigo-100 dark:border-indigo-900/60 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+              </svg>
+              <span class="text-xs font-bold text-indigo-900 dark:text-indigo-200">Live Sync Offset</span>
+              <span id="ls-offset-badge" class="px-2 py-0.5 rounded-md font-mono-code text-xs font-bold bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 min-w-[68px] text-center">0ms</span>
+            </div>
+
+            <div class="flex-1 min-w-[140px] max-w-xs flex items-center gap-2">
+              <span class="text-[10px] font-mono-code text-slate-400">-5s</span>
+              <input type="range" id="ls-offset-slider" min="-5000" max="5000" step="50" value="0" class="ls-range flex-1" title="Drag to preview lyric sync offset in real time">
+              <span class="text-[10px] font-mono-code text-slate-400">+5s</span>
+            </div>
+
+            <div class="flex items-center gap-1.5">
+              <button id="ls-btn-bake-offset" disabled onclick="lsBakePreviewOffset()" class="px-2.5 py-1 rounded-lg bg-indigo-600 disabled:opacity-40 hover:bg-indigo-700 text-white text-xs font-semibold transition" title="Permanently apply this preview offset to the LRC timestamps">
+                Bake Offset
+              </button>
+              <button id="ls-btn-reset-offset" disabled onclick="lsResetPreviewOffset()" class="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-semibold transition" title="Reset preview offset to 0ms">
+                Reset
+              </button>
+            </div>
+          </div>
+
           <div id="ls-lyrics-container" class="flex-1 overflow-y-auto custom-scrollbar px-6 sm:px-8 py-10 space-y-3 scroll-smooth"></div>
           <div class="h-6 bg-gradient-to-t from-white dark:from-slate-900 to-transparent pointer-events-none absolute bottom-0 left-0 right-0"></div>
         </div>
@@ -586,6 +613,29 @@
                 </svg>
                 <span>Export .LRC</span>
               </button>
+            </div>
+          </div>
+
+          <!-- TIME-SHIFT TOOLS PANEL -->
+          <div class="bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/60 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              <span class="text-xs font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-300">Time-Shift Tool</span>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-1.5">
+              <button onclick="lsTimeShift(-2000)" class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-indigo-100 text-slate-700 dark:text-slate-300 text-xs font-semibold border border-indigo-200 dark:border-slate-700 transition" title="Shift all timestamps back 2.0s">-2.0s</button>
+              <button onclick="lsTimeShift(-500)" class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-indigo-100 text-slate-700 dark:text-slate-300 text-xs font-semibold border border-indigo-200 dark:border-slate-700 transition" title="Shift all timestamps back 0.5s">-500ms</button>
+              <button onclick="lsTimeShift(500)" class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-indigo-100 text-slate-700 dark:text-slate-300 text-xs font-semibold border border-indigo-200 dark:border-slate-700 transition" title="Shift all timestamps forward 0.5s">+500ms</button>
+              <button onclick="lsTimeShift(2000)" class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-indigo-100 text-slate-700 dark:text-slate-300 text-xs font-semibold border border-indigo-200 dark:border-slate-700 transition" title="Shift all timestamps forward 2.0s">+2.0s</button>
+              
+              <div class="flex items-center gap-1 ml-2 pl-2 border-l border-indigo-200 dark:border-indigo-800">
+                <input type="number" id="ls-custom-shift-ms" value="1000" step="100" class="w-20 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-indigo-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-mono-code text-center">
+                <span class="text-[11px] text-slate-500">ms</span>
+                <button onclick="lsCustomTimeShift()" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition">Shift</button>
+              </div>
             </div>
           </div>
 
@@ -1458,6 +1508,7 @@ const lsState = {
   isPlaying: false,
   duration: 0,
   currentTime: 0,
+  syncOffsetMs: 0,
   volume: 0.85,
   isMuted: false,
   playbackRate: 1.0,
@@ -1518,7 +1569,11 @@ const lsDom = {
   btnApplyLyrics: $('ls-btn-apply-lyrics'),
   btnExportLrc: $('ls-btn-export-lrc'),
   syncCursorIndicator: $('ls-sync-cursor-indicator'),
-  syncerTextarea: $('ls-syncer-textarea')
+  syncerTextarea: $('ls-syncer-textarea'),
+  offsetSlider: $('ls-offset-slider'),
+  offsetBadge: $('ls-offset-badge'),
+  btnBakeOffset: $('ls-btn-bake-offset'),
+  btnResetOffset: $('ls-btn-reset-offset')
 };
 
 function lsShowToast(message, type = 'info') {
@@ -1557,6 +1612,88 @@ function lsFormatLrcTimestamp(seconds) {
   const secs = Math.floor(seconds % 60);
   const hundredths = Math.floor((seconds % 1) * 100);
   return `[${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${String(hundredths).padStart(2, '0')}]`;
+}
+
+// ==================== LIVE OFFSET PREVIEW SLIDER FUNCTIONS ====================
+function lsUpdateOffsetUI() {
+  const ms = lsState.syncOffsetMs;
+  const sign = ms > 0 ? '+' : '';
+  lsDom.offsetBadge.textContent = `${sign}${ms}ms`;
+  lsDom.offsetSlider.value = ms;
+
+  const hasOffset = ms !== 0;
+  lsDom.btnBakeOffset.disabled = !hasOffset;
+  lsDom.btnResetOffset.disabled = !hasOffset;
+
+  if (hasOffset) {
+    lsDom.offsetBadge.classList.add('bg-indigo-100', 'dark:bg-indigo-900', 'text-indigo-900', 'dark:text-indigo-100');
+    lsDom.offsetBadge.classList.remove('bg-white', 'dark:bg-slate-900');
+  } else {
+    lsDom.offsetBadge.classList.remove('bg-indigo-100', 'dark:bg-indigo-900', 'text-indigo-900', 'dark:text-indigo-100');
+    lsDom.offsetBadge.classList.add('bg-white', 'dark:bg-slate-900');
+  }
+}
+
+function lsResetPreviewOffset() {
+  lsState.syncOffsetMs = 0;
+  lsUpdateOffsetUI();
+  lsUpdateActiveLyric(true);
+}
+
+function lsBakePreviewOffset() {
+  const offset = lsState.syncOffsetMs;
+  if (offset === 0) return;
+  lsTimeShift(offset);
+  lsResetPreviewOffset();
+}
+
+// ==================== TIME-SHIFT TOOL IMPLEMENTATION ====================
+function lsTimeShift(msOffset) {
+  const rawText = lsDom.syncerTextarea.value;
+  if (!rawText.trim()) {
+    lsShowToast('No lyrics in the Syncer Editor to time-shift.', 'warning');
+    return;
+  }
+
+  const lines = rawText.split(/\r?\n/);
+  const timeTagRegex = /\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\]/g;
+  let shiftedCount = 0;
+
+  const updatedLines = lines.map((line) => {
+    return line.replace(timeTagRegex, (match, m, s, f) => {
+      const mins = parseInt(m, 10);
+      const secs = parseInt(s, 10);
+      const fracStr = f || '0';
+      const frac = parseInt(fracStr, 10) / Math.pow(10, fracStr.length);
+      const totalSeconds = mins * 60 + secs + frac;
+      
+      const newSeconds = Math.max(0, totalSeconds + (msOffset / 1000));
+      shiftedCount++;
+      return lsFormatLrcTimestamp(newSeconds);
+    });
+  });
+
+  if (shiftedCount === 0) {
+    lsShowToast('No timestamp tags [mm:ss.xx] found to shift.', 'warning');
+    return;
+  }
+
+  lsDom.syncerTextarea.value = updatedLines.join('\n');
+  lsState.lyrics = lsParseLyricsText(lsDom.syncerTextarea.value);
+  lsRenderLyricsList();
+  lsUpdateActiveLyric(true);
+
+  const sign = msOffset > 0 ? '+' : '';
+  lsShowToast(`Applied ${sign}${msOffset}ms shift to all timestamps`, 'success');
+}
+
+function lsCustomTimeShift() {
+  const val = parseInt($('ls-custom-shift-ms').value, 10);
+  if (isNaN(val)) {
+    lsShowToast('Please enter a valid millisecond offset.', 'error');
+    return;
+  }
+  lsTimeShift(val);
 }
 
 function lsUpdateLrcMatchBadge(status, labelText) {
@@ -1873,7 +2010,9 @@ function lsRenderLyricsList() {
     row.appendChild(textEl);
 
     row.addEventListener('click', () => {
-      lsSeekTo(line.time);
+      // Seek accounting for preview offset so clicking jumps straight to the previewed cue
+      const targetSeek = Math.max(0, line.time + (lsState.syncOffsetMs / 1000));
+      lsSeekTo(targetSeek);
       if (!lsState.isPlaying) lsStartPlayback();
     });
 
@@ -1884,9 +2023,12 @@ function lsRenderLyricsList() {
 function lsUpdateActiveLyric(forceScroll = false) {
   if (!lsState.lyrics || lsState.lyrics.length === 0) return;
 
+  // Apply real-time preview offset (if LRC is shifted +500ms, lyric lines appear 500ms later)
+  const effectivePlayhead = lsState.currentTime - (lsState.syncOffsetMs / 1000);
+
   let newIndex = -1;
   for (let i = 0; i < lsState.lyrics.length; i++) {
-    if (lsState.currentTime >= lsState.lyrics[i].time - 0.08) {
+    if (effectivePlayhead >= lsState.lyrics[i].time - 0.08) {
       newIndex = i;
     } else {
       break;
@@ -1925,6 +2067,7 @@ function lsUpdateActiveLyric(forceScroll = false) {
 }
 
 function lsLoadLyricsIntoApp(rawText, sourceName = 'Lyrics', silentToast = false) {
+  lsResetPreviewOffset();
   lsDom.syncerTextarea.value = rawText;
   lsState.lyrics = lsParseLyricsText(rawText);
   lsState.activeLyricIndex = -1;
@@ -1938,6 +2081,7 @@ function lsLoadLyricsIntoApp(rawText, sourceName = 'Lyrics', silentToast = false
 }
 
 function lsClearLyricsForUnmatchedTrack(stemName) {
+  lsResetPreviewOffset();
   lsDom.syncerTextarea.value = '';
   lsState.lyrics = [];
   lsState.activeLyricIndex = -1;
@@ -2290,6 +2434,13 @@ function lsBindEvents() {
     const pct = parseFloat(e.target.value);
     const targetTime = (pct / 100) * lsState.duration;
     lsSeekTo(targetTime);
+  });
+
+  // Real-Time Sync Offset Preview Slider listener
+  lsDom.offsetSlider.addEventListener('input', (e) => {
+    lsState.syncOffsetMs = parseInt(e.target.value, 10);
+    lsUpdateOffsetUI();
+    lsUpdateActiveLyric(true);
   });
 
   lsDom.volumeSlider.addEventListener('input', (e) => {
