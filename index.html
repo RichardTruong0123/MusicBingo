@@ -436,12 +436,16 @@
             </div>
           </div>
 
-          <!-- Real-Time Web Audio Visualizer Canvas -->
+          <!-- Real-Time Web Audio Visualizer Canvas with Spectrum / Waveform Toggle -->
           <div class="relative w-full h-36 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden mb-4 flex items-center justify-center">
             <canvas id="ls-visualizer-canvas" class="w-full h-full block"></canvas>
             <div id="ls-visualizer-idle-label" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-slate-400 text-xs gap-1">
               <span class="font-medium text-slate-500 dark:text-slate-400">Play audio in Song Manager to start Visualizer</span>
             </div>
+            <button id="ls-btn-vis-mode" class="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-slate-200/80 dark:bg-slate-800/80 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-semibold backdrop-blur-xs transition z-20 flex items-center gap-1.5" title="Switch Visualizer Mode">
+              <span id="ls-vis-mode-icon">📊</span>
+              <span id="ls-vis-mode-label">Spectrum</span>
+            </button>
           </div>
 
           <!-- Seekable Progress Bar & Timestamps -->
@@ -1000,7 +1004,7 @@ $('folder').addEventListener('change', async e=>{
 // ==================== LRC MANAGER INTEGRATION ============================
 // =========================================================================
 function durationText(s){if(!Number.isFinite(s))return "—";let m=Math.floor(s/60),r=Math.floor(s%60);return `${m}:${String(r).padStart(2,"0")}`}
-function lrcSafeName(s){return (s||"Unknown").replace(/[\\/:*?"<>|]/g,"_").trim()}
+function lrcSafeName(s){return (s||"Unknown").replace(/[\\/:*?"<>|]/g,"").trim()}
 
 function registerSavedLrcInMemory(mp3FileName, lrcFilename, lrcText) {
  const stem = mp3FileName.replace(/\.[^/.]+$/, '').trim().toLowerCase();
@@ -1513,6 +1517,7 @@ const lsState = {
   isMuted: false,
   playbackRate: 1.0,
   autoScroll: true,
+  visualizerMode: 'spectrum', // 'spectrum' or 'waveform'
   lyrics: [],
   activeLyricIndex: -1,
   syncCursorLine: 0,
@@ -1542,6 +1547,9 @@ const lsDom = {
   libraryItems: $('ls-library-items'),
   canvas: $('ls-visualizer-canvas'),
   visualizerIdleLabel: $('ls-visualizer-idle-label'),
+  btnVisMode: $('ls-btn-vis-mode'),
+  visModeIcon: $('ls-vis-mode-icon'),
+  visModeLabel: $('ls-vis-mode-label'),
   seekSlider: $('ls-seek-slider'),
   seekFill: $('ls-seek-fill'),
   timeElapsed: $('ls-time-elapsed'),
@@ -2010,7 +2018,6 @@ function lsRenderLyricsList() {
     row.appendChild(textEl);
 
     row.addEventListener('click', () => {
-      // Seek accounting for preview offset so clicking jumps straight to the previewed cue
       const targetSeek = Math.max(0, line.time + (lsState.syncOffsetMs / 1000));
       lsSeekTo(targetSeek);
       if (!lsState.isPlaying) lsStartPlayback();
@@ -2023,7 +2030,6 @@ function lsRenderLyricsList() {
 function lsUpdateActiveLyric(forceScroll = false) {
   if (!lsState.lyrics || lsState.lyrics.length === 0) return;
 
-  // Apply real-time preview offset (if LRC is shifted +500ms, lyric lines appear 500ms later)
   const effectivePlayhead = lsState.currentTime - (lsState.syncOffsetMs / 1000);
 
   let newIndex = -1;
@@ -2074,6 +2080,11 @@ function lsLoadLyricsIntoApp(rawText, sourceName = 'Lyrics', silentToast = false
   lsState.syncCursorLine = 0;
   lsUpdateSyncCursorIndicator();
   lsRenderLyricsList();
+  
+  if (lsDom.lyricsContainer) {
+    lsDom.lyricsContainer.scrollTop = 0;
+  }
+
   lsUpdateActiveLyric(true);
   if (!silentToast) {
     lsShowToast(`Loaded ${lsState.lyrics.length} lyric lines from ${sourceName}`, 'success');
@@ -2088,6 +2099,11 @@ function lsClearLyricsForUnmatchedTrack(stemName) {
   lsState.syncCursorLine = 0;
   lsUpdateSyncCursorIndicator();
   lsRenderLyricsList();
+  
+  if (lsDom.lyricsContainer) {
+    lsDom.lyricsContainer.scrollTop = 0;
+  }
+
   lsUpdateLrcMatchBadge('missing', `No ${stemName}.lrc found`);
 }
 
@@ -2231,6 +2247,10 @@ async function lsHandleManagerSongPlay(songItem) {
   lsDom.trackBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span> Manager Song Loaded`;
   lsDom.trackBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300';
 
+  if (lsDom.lyricsContainer) {
+    lsDom.lyricsContainer.scrollTop = 0;
+  }
+
   await lsResolveAccompanyingLyrics(songItem.file);
 }
 
@@ -2344,10 +2364,19 @@ function lsExportLrcFile() {
     lsShowToast('Nothing to export! Add lyrics first.', 'warning');
     return;
   }
-  const safeTitle = (lsDom.trackTitle.textContent || 'lyrics').replace(/[^a-z0-9_\-\s]/gi, '').trim().replace(/\s+/g, '_');
-  const filename = `${safeTitle || 'synchronized_lyrics'}.lrc`;
   
   const currentTrack = available.find(x => x.id === currentId) || selected.find(x => x.id === currentId);
+  let filename = 'synchronized_lyrics.lrc';
+
+  if (currentTrack && currentTrack.file && currentTrack.file.name) {
+    const originalName = currentTrack.file.name;
+    const stem = originalName.replace(/\.[^/.]+$/, '').trim();
+    filename = lrcSafeName(stem) + '.lrc';
+  } else {
+    const rawTitle = (lsDom.trackTitle.textContent || 'synchronized_lyrics').trim();
+    filename = lrcSafeName(rawTitle) + '.lrc';
+  }
+  
   if (currentTrack) {
     registerSavedLrcInMemory(currentTrack.file.name, filename, content);
   }
@@ -2381,36 +2410,64 @@ function lsRenderVisualizerLoop() {
     ctx.clearRect(0, 0, width, height);
 
     if (lsState.analyser && lsState.isPlaying) {
-      const bufferLength = lsState.analyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
-      lsState.analyser.getByteFrequencyData(dataArray);
+      if (lsState.visualizerMode === 'spectrum') {
+        const bufferLength = lsState.analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        lsState.analyser.getByteFrequencyData(dataArray);
 
-      const bars = 48;
-      const step = Math.floor(bufferLength * 0.75 / bars);
-      const gap = 4 * (window.devicePixelRatio || 1);
-      const barWidth = Math.max(2, (width - gap * (bars + 1)) / bars);
+        const bars = 48;
+        const step = Math.floor(bufferLength * 0.75 / bars);
+        const gap = 4 * (window.devicePixelRatio || 1);
+        const barWidth = Math.max(2, (width - gap * (bars + 1)) / bars);
 
-      const gradient = ctx.createLinearGradient(0, height, 0, 0);
-      gradient.addColorStop(0, '#2563eb');
-      gradient.addColorStop(0.5, '#6366f1');
-      gradient.addColorStop(1, '#9333ea');
+        const gradient = ctx.createLinearGradient(0, height, 0, 0);
+        gradient.addColorStop(0, '#2563eb');
+        gradient.addColorStop(0.5, '#6366f1');
+        gradient.addColorStop(1, '#9333ea');
 
-      ctx.fillStyle = gradient;
+        ctx.fillStyle = gradient;
 
-      for (let i = 0; i < bars; i++) {
-        const val = dataArray[i * step] || 0;
-        const normalized = val / 255;
-        const barHeight = Math.max(4, normalized * (height * 0.82));
-        const x = gap + i * (barWidth + gap);
-        const y = (height - barHeight) / 2;
+        for (let i = 0; i < bars; i++) {
+          const val = dataArray[i * step] || 0;
+          const normalized = val / 255;
+          const barHeight = Math.max(4, normalized * (height * 0.82));
+          const x = gap + i * (barWidth + gap);
+          const y = (height - barHeight) / 2;
 
-        ctx.beginPath();
-        if (ctx.roundRect) {
-          ctx.roundRect(x, y, barWidth, barHeight, barWidth / 2);
-        } else {
-          ctx.rect(x, y, barWidth, barHeight);
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(x, y, barWidth, barHeight, barWidth / 2);
+          } else {
+            ctx.rect(x, y, barWidth, barHeight);
+          }
+          ctx.fill();
         }
-        ctx.fill();
+      } else {
+        // Waveform / Oscilloscope mode
+        const bufferLength = lsState.analyser.fftSize;
+        const dataArray = new Uint8Array(bufferLength);
+        lsState.analyser.getByteTimeDomainData(dataArray);
+
+        ctx.lineWidth = 2 * (window.devicePixelRatio || 1);
+        ctx.strokeStyle = '#6366f1';
+        ctx.beginPath();
+
+        const sliceWidth = width / bufferLength;
+        let x = 0;
+
+        for (let i = 0; i < bufferLength; i++) {
+          const v = dataArray[i] / 128.0;
+          const y = (v * height) / 2;
+
+          if (i === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+          x += sliceWidth;
+        }
+        ctx.lineTo(width, height / 2);
+        ctx.stroke();
       }
     } else {
       ctx.strokeStyle = document.documentElement.classList.contains('dark') ? 'rgba(96, 165, 250, 0.2)' : 'rgba(37, 99, 235, 0.2)';
@@ -2434,6 +2491,19 @@ function lsBindEvents() {
     const pct = parseFloat(e.target.value);
     const targetTime = (pct / 100) * lsState.duration;
     lsSeekTo(targetTime);
+  });
+
+  // Visualizer Mode Toggle Button listener
+  lsDom.btnVisMode.addEventListener('click', () => {
+    lsState.visualizerMode = lsState.visualizerMode === 'spectrum' ? 'waveform' : 'spectrum';
+    if (lsState.visualizerMode === 'spectrum') {
+      lsDom.visModeIcon.textContent = '📊';
+      lsDom.visModeLabel.textContent = 'Spectrum';
+    } else {
+      lsDom.visModeIcon.textContent = '📈';
+      lsDom.visModeLabel.textContent = 'Waveform';
+    }
+    lsShowToast(`Visualizer mode: ${lsState.visualizerMode === 'spectrum' ? 'Spectrum Analyzer' : 'Time-Domain Waveform'}`, 'info');
   });
 
   // Real-Time Sync Offset Preview Slider listener
